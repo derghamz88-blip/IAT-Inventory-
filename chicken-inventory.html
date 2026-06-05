@@ -301,11 +301,11 @@ function renderHdr(){
       <div class="hs"><div class="hs-v" style="color:#FFE082">${D.sales.length}</div><div class="hs-l">Sales</div></div>
     </div>
     <div style="display:flex;gap:5px;margin-left:8px;align-items:center">
-      ${getODUser()?`<span style="font-size:9px;color:#90CAF9;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${getODUser()}</span>`:''}
-      <button id="od-save-btn" onclick="odSave()" title="Save to OneDrive" style="padding:5px 9px;background:${getODUser()?'#0078D4':'rgba(255,255,255,.15)'};border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">☁️</button>
-      <button id="od-load-btn" onclick="odLoad()" title="Load from OneDrive" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">📂</button>
-      <button onclick="showHdrMenu()" title="More options" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">⋮</button>
-      <input id="fallback-import" type="file" accept=".json" onchange="importData(this)" style="display:none">
+      <button onclick="exportData()" title="Save backup file" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">💾</button>
+      <label title="Restore from file" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">
+        📂<input type="file" accept=".json" onchange="importData(this)" style="display:none">
+      </label>
+      <button onclick="showHdrMenu()" title="More" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">⋮</button>
     </div>
   </header>`;
 }
@@ -1969,61 +1969,79 @@ const OD_CLIENT_ID='86182a86-981c-46ab-a5e9-c61d8410c64b';
 const OD_REDIRECT='https://derghamz88-blip.github.io/IAT-Inventory-/chicken-inventory.html';
 const OD_SCOPES=['Files.ReadWrite','User.Read'];
 let _msalApp=null;
+const IS_MOBILE=/Android|iPhone|iPad|webOS|Mobile/i.test(navigator.userAgent);
 
 async function getMSAL(){
   if(_msalApp)return _msalApp;
   _msalApp=new msal.PublicClientApplication({
-    auth:{clientId:OD_CLIENT_ID,authority:'https://login.microsoftonline.com/consumers',redirectUri:OD_REDIRECT,navigateToLoginRequestUrl:false},
+    auth:{clientId:OD_CLIENT_ID,authority:'https://login.microsoftonline.com/common',redirectUri:OD_REDIRECT,navigateToLoginRequestUrl:false},
     cache:{cacheLocation:'localStorage',storeAuthStateInCookie:false}
   });
   await _msalApp.initialize();
-  try{const r=await _msalApp.handleRedirectPromise();if(r)localStorage.setItem('od-user',r.account.name||r.account.username);}catch(e){}
+  try{
+    const r=await _msalApp.handleRedirectPromise();
+    if(r){
+      localStorage.setItem('od-user',r.account.name||r.account.username);
+      // Resume pending action after redirect login
+      const pending=localStorage.getItem('od-pending');
+      localStorage.removeItem('od-pending');
+      render();
+      if(pending==='save')setTimeout(()=>odSave(true),500);
+      else if(pending==='load')setTimeout(()=>odLoad(true),500);
+    }
+  }catch(e){console.warn('MSAL:',e);}
   return _msalApp;
 }
 
-async function getODToken(){
+async function getODToken(pendingAction){
   const app=await getMSAL();
   const accounts=app.getAllAccounts();
   const req={scopes:OD_SCOPES};
+  // Try silent first
   if(accounts.length>0){
     req.account=accounts[0];
     try{const r=await app.acquireTokenSilent(req);return r.accessToken;}catch(e){}
   }
-  try{
-    const r=await app.acquireTokenPopup(req);
-    localStorage.setItem('od-user',r.account.name||r.account.username);
-    render();// refresh header to show account
-    return r.accessToken;
-  }catch(e){
-    if(e.errorCode!=='user_cancelled'&&e.name!=='BrowserAuthError')throw e;
-    return null;
+  // Need interactive login
+  if(IS_MOBILE){
+    // Mobile: use redirect (popups are blocked on Android Chrome)
+    if(pendingAction)localStorage.setItem('od-pending',pendingAction);
+    showToast('🔐 Redirecting to Microsoft login...');
+    await app.acquireTokenRedirect(req);
+    return null; // redirect happens, page reloads
+  } else {
+    // Desktop: use popup
+    try{
+      const r=await app.acquireTokenPopup(req);
+      localStorage.setItem('od-user',r.account.name||r.account.username);
+      render();return r.accessToken;
+    }catch(e){return null;}
   }
 }
 
 function getODUser(){return localStorage.getItem('od-user')||'';}
 
 async function odSignOut(){
-  const app=await getMSAL();
-  const accounts=app.getAllAccounts();
-  if(accounts.length>0)await app.logoutPopup({account:accounts[0]}).catch(()=>{});
-  localStorage.removeItem('od-user');render();
-  showToast('Signed out from OneDrive');
+  const app=await getMSAL();const accounts=app.getAllAccounts();
+  if(accounts.length>0)await app.logoutPopup({account:accounts[0]}).catch(()=>{
+    // Mobile fallback
+    app.logoutRedirect({account:accounts[0]});
+  });
+  localStorage.removeItem('od-user');render();showToast('Signed out');
 }
 
-async function odSave(forceNew=false){
+async function odSave(hasToken=false){
   const btn=document.getElementById('od-save-btn');
   if(btn){btn.textContent='⏳';btn.disabled=true;}
   try{
     showToast('🔐 Connecting...');
-    const token=await getODToken();
-    if(!token){showToast('Cancelled');return;}
+    const token=await getODToken('save');
+    if(!token){if(btn){btn.textContent='☁️';btn.disabled=false;}return;}// redirect happened
     const data={version:3,exportDate:new Date().toISOString(),PRODUCTS,MD,SMD,SH_DATA,D,FA,FB};
-    const json=JSON.stringify(data,null,2);
     showToast('☁️ Saving to OneDrive...');
     const resp=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/IAT-Inventory/IAT-Inventory-Backup.json:/content',{
-      method:'PUT',
-      headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
-      body:json
+      method:'PUT',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify(data,null,2)
     });
     if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e.error?.message||'HTTP '+resp.status);}
     showToast('✅ Saved to OneDrive/IAT-Inventory/');
@@ -2031,31 +2049,56 @@ async function odSave(forceNew=false){
   if(btn){btn.textContent='☁️';btn.disabled=false;}
 }
 
-async function odLoad(){
+async function odLoad(hasToken=false){
   const btn=document.getElementById('od-load-btn');
   if(btn){btn.textContent='⏳';btn.disabled=true;}
   try{
     showToast('🔐 Connecting...');
-    const token=await getODToken();
-    if(!token){showToast('Cancelled');return;}
+    const token=await getODToken('load');
+    if(!token){if(btn){btn.textContent='📂';btn.disabled=false;}return;}
     showToast('📂 Loading from OneDrive...');
-    // List files in folder
     const listResp=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/IAT-Inventory:/children',{headers:{'Authorization':'Bearer '+token}});
-    let fileId=null;
-    if(listResp.ok){
-      const list=await listResp.json();
-      const files=(list.value||[]).filter(f=>f.name.endsWith('.json')).sort((a,b)=>new Date(b.lastModifiedDateTime)-new Date(a.lastModifiedDateTime));
-      if(!files.length){alert('No backup files in OneDrive/IAT-Inventory/\nSave first!');return;}
-      fileId=files[0].id;
-    } else {alert('Folder not found. Save first!');return;}
-    const fileResp=await fetch('https://graph.microsoft.com/v1.0/me/drive/items/'+fileId+'/content',{headers:{'Authorization':'Bearer '+token}});
+    if(!listResp.ok){alert('No backup folder found.\nSave first!');return;}
+    const list=await listResp.json();
+    const files=(list.value||[]).filter(f=>f.name.endsWith('.json')).sort((a,b)=>new Date(b.lastModifiedDateTime)-new Date(a.lastModifiedDateTime));
+    if(!files.length){alert('No backup files in OneDrive/IAT-Inventory/');return;}
+    const fileResp=await fetch('https://graph.microsoft.com/v1.0/me/drive/items/'+files[0].id+'/content',{headers:{'Authorization':'Bearer '+token}});
     if(!fileResp.ok)throw new Error('HTTP '+fileResp.status);
     const data=await fileResp.json();
     if(!data.version||!data.D){alert('Invalid file');return;}
-    if(!confirm('Restore from OneDrive backup?\nReplaces all current data.'))return;
+    if(!confirm('Restore from OneDrive?\nReplaces all current data.'))return;
     applyBackup(data);showToast('✅ Restored from OneDrive!');
   }catch(e){alert('OneDrive load error: '+e.message);}
   if(btn){btn.textContent='📂';btn.disabled=false;}
+}
+
+// Called directly from button — no async before redirect (Android fix)
+function odSaveClick(){
+  if(!_msalApp){
+    showToast('⏳ Initializing...');
+    getMSAL().then(()=>odSaveClick()).catch(e=>alert('Init error: '+e.message));
+    return;
+  }
+  const accounts=_msalApp.getAllAccounts();
+  if(accounts.length===0&&IS_MOBILE){
+    localStorage.setItem('od-pending','save');
+    _msalApp.loginRedirect({scopes:OD_SCOPES}); // sync from click = no Permission denied
+    return;
+  }
+  odSave();
+}
+function odLoadClick(){
+  if(!_msalApp){
+    getMSAL().then(()=>odLoadClick());
+    return;
+  }
+  const accounts=_msalApp.getAllAccounts();
+  if(accounts.length===0&&IS_MOBILE){
+    localStorage.setItem('od-pending','load');
+    _msalApp.loginRedirect({scopes:OD_SCOPES});
+    return;
+  }
+  odLoad();
 }
 
 function applyBackup(data){

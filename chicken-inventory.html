@@ -594,35 +594,116 @@ function saveReceiptAsRec(){
 }
 
 // ─── AI Receipt Scanner ───────────────────────────
+const SK_API='chk-api-key';
+const SK_GEMINI='chk-gemini-key';
+const SK_AI_PROV='chk-ai-prov';
+function getAPIKey(){return localStorage.getItem(SK_API)||'';}
+function saveAPIKey(k){localStorage.setItem(SK_API,k.trim());}
+function getGeminiKey(){return localStorage.getItem(SK_GEMINI)||'';}
+function saveGeminiKey(k){localStorage.setItem(SK_GEMINI,k.trim());}
+function getAIProv(){return localStorage.getItem(SK_AI_PROV)||'gemini';}
+function saveAIProv(p){localStorage.setItem(SK_AI_PROV,p);}
+
 async function scanReceiptAI(input){
   const file=input.files[0];if(!file)return;input.value='';
+  const prov=getAIProv();
+  const apiKey=prov==='gemini'?getGeminiKey():getAPIKey();
+  if(!apiKey){
+    const where=prov==='gemini'
+      ?'aistudio.google.com → Get API Key (مجاني)'
+      :'console.anthropic.com';
+    alert(`❌ API Key مش موجود!\n\nروح: Settings → 🔑 API Key\nوحط مفتاحك من:\n${where}`);
+    return;
+  }
   showToast('🔍 Scanning with AI...');
   try{
-    const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,
-        messages:[{role:'user',content:[
-          {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
-          {type:'text',text:'Analyze this Fresh Chicken Receipt Report image. Return ONLY a JSON object with no markdown:\n{"supplier":"name or null","date":"YYYY-MM-DD or null","ctns":{"1300":32,"1350":17},"cuts":{"breast":0,"legs":0,"drum":0,"thigh":0,"thighbl":0,"wings":0,"liver":0,"gizzard":0,"heart":0,"bone":0}}\nOnly include sizes that have actual numbers. cuts in KG. Omit zero values.'}
-        ]}]
-      })
+    const b64=await new Promise((res,rej)=>{
+      const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);
     });
-    const d=await resp.json();
-    const txt=d.content.map(x=>x.text||'').join('').replace(/```json|```/g,'').trim();
-    const result=JSON.parse(txt);
+    const prompt='Analyze this Fresh Chicken Receipt Report image. Return ONLY a JSON object with no markdown:\n{"supplier":"name or null","date":"YYYY-MM-DD or null","ctns":{"1300":32,"1350":17},"cuts":{"breast":0,"legs":0,"drum":0,"thigh":0,"thighbl":0,"wings":0,"liver":0,"gizzard":0,"heart":0,"bone":0}}\nOnly include sizes that have actual numbers. cuts in KG. Omit zero values.';
+    let result;
+    if(prov==='gemini'){
+      const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({contents:[{parts:[{inline_data:{mime_type:file.type,data:b64}},{text:prompt}]}]})
+      });
+      if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e.error?.message||'HTTP '+resp.status);}
+      const d=await resp.json();
+      const txt=d.candidates[0].content.parts[0].text.replace(/```json|```/g,'').trim();
+      result=JSON.parse(txt);
+    } else {
+      const resp=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:1000,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:file.type,data:b64}},{type:'text',text:prompt}]}]})
+      });
+      if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e.error?.message||'HTTP '+resp.status);}
+      const d=await resp.json();
+      const txt=d.content.map(x=>x.text||'').join('').replace(/```json|```/g,'').trim();
+      result=JSON.parse(txt);
+    }
     if(result.supplier)RC.supplier=result.supplier;
     if(result.date)RC.date=result.date;
     if(result.ctns)Object.entries(result.ctns).forEach(([k,v])=>{if(v)RC.ctns[k]=String(v);});
     if(result.cuts)Object.entries(result.cuts).forEach(([k,v])=>{if(v&&CUT_PRODUCTS.find(c=>c.key===k))RC.cuts[k]=String(v);});
     render();showToast('✅ Scanned! Please verify.');
   }catch(e){
-    if(e.message.includes('fetch')||e.message.includes('Failed')){
-      alert('❌ Scan requires internet connection AND must be opened from:\nhttps://derghamz88-blip.github.io/IAT-Inventory-/chicken-inventory.html\n\nCannot scan from a downloaded local file.');
+    if(e.message.includes('401')||e.message.includes('API_KEY')||e.message.includes('auth')){
+      alert('❌ API Key غلط أو منتهي!\nتحقق من Settings → 🔑 API Key');
     } else {
       alert('Scan error: '+e.message);
     }
   }
+}
+
+// ─── Settings: API Key ────────────────────────────
+function renderSettingsAPI(){
+  const prov=getAIProv();
+  const gKey=getGeminiKey();const aKey=getAPIKey();
+  return`<div class="card">
+    <h3 style="margin:0 0 12px;font-size:14px;color:#455A64">🔑 AI Provider for Receipt Scanning</h3>
+    <!-- Provider choice -->
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button class="btn" style="flex:1;padding:12px;background:${prov==='gemini'?'#1565C0':'#ECEFF1'};color:${prov==='gemini'?'#fff':'#546E7A'};border-radius:10px;font-size:13px" onclick="saveAIProv('gemini');render()">
+        <div style="font-size:20px;margin-bottom:4px">🆓</div>
+        <div style="font-weight:700">Google Gemini</div>
+        <div style="font-size:10px;opacity:.8">Free — No credit card</div>
+      </button>
+      <button class="btn" style="flex:1;padding:12px;background:${prov==='anthropic'?'#6A1B9A':'#ECEFF1'};color:${prov==='anthropic'?'#fff':'#546E7A'};border-radius:10px;font-size:13px" onclick="saveAIProv('anthropic');render()">
+        <div style="font-size:20px;margin-bottom:4px">🤖</div>
+        <div style="font-weight:700">Anthropic Claude</div>
+        <div style="font-size:10px;opacity:.8">Paid — Higher accuracy</div>
+      </button>
+    </div>
+    <!-- Gemini key -->
+    <div style="background:${prov==='gemini'?'#E3F2FD':'#F5F5F5'};padding:12px;border-radius:10px;margin-bottom:10px;border:${prov==='gemini'?'2px solid #1565C0':'1px solid #E0E0E0'}">
+      <div style="font-size:12px;font-weight:700;color:#1565C0;margin-bottom:6px">Google Gemini API Key ${prov==='gemini'?'← Active':''}</div>
+      <div style="font-size:11px;color:#546E7A;margin-bottom:8px">
+        1. روح: <b>aistudio.google.com</b><br>
+        2. اضغط <b>Get API Key</b> → Create API Key<br>
+        3. انسخ الـ key والصقه هنا
+      </div>
+      <div style="display:flex;gap:6px">
+        <input id="gemini-key-inp" class="fi" type="password" placeholder="AIzaSy..." value="${gKey}" style="flex:1;font-size:12px;font-family:monospace">
+        <button class="btn" style="background:#1565C0;color:#fff;font-size:12px" onclick="saveGeminiKey(document.getElementById('gemini-key-inp').value);showToast('✅ Gemini key saved!')">Save</button>
+      </div>
+      ${gKey?`<div style="margin-top:6px;font-size:10px;color:#2E7D32">✅ Key configured (${gKey.length} chars)</div>`:'<div style="margin-top:6px;font-size:10px;color:#C62828">⚠️ No key yet</div>'}
+    </div>
+    <!-- Anthropic key -->
+    <div style="background:${prov==='anthropic'?'#F3E5F5':'#F5F5F5'};padding:12px;border-radius:10px;border:${prov==='anthropic'?'2px solid #6A1B9A':'1px solid #E0E0E0'}">
+      <div style="font-size:12px;font-weight:700;color:#6A1B9A;margin-bottom:6px">Anthropic API Key ${prov==='anthropic'?'← Active':''}</div>
+      <div style="font-size:11px;color:#546E7A;margin-bottom:8px">
+        1. روح: <b>console.anthropic.com</b><br>
+        2. Settings → API Keys → Create Key<br>
+        3. انسخ الـ key والصقه هنا (مدفوع)
+      </div>
+      <div style="display:flex;gap:6px">
+        <input id="anth-key-inp" class="fi" type="password" placeholder="sk-ant-..." value="${aKey}" style="flex:1;font-size:12px;font-family:monospace">
+        <button class="btn" style="background:#6A1B9A;color:#fff;font-size:12px" onclick="saveAPIKey(document.getElementById('anth-key-inp').value);showToast('✅ Anthropic key saved!')">Save</button>
+      </div>
+      ${aKey?`<div style="margin-top:6px;font-size:10px;color:#2E7D32">✅ Key configured (${aKey.length} chars)</div>`:'<div style="margin-top:6px;font-size:10px;color:#78909C">No key</div>'}
+    </div>
+  </div>`;
 }
 
 // ─── Carton Weight Verification (Multi-row) ──────
@@ -931,9 +1012,10 @@ function renderSettings(){
       <button class="stb${S.stab==='stockmap'?' on':''}" onclick="S.stab='stockmap';render()">📊 Stock Map (${SMD.length})</button>
       <button class="stb${S.stab==='sh'?' on':''}" onclick="S.stab='sh';render()">🏭 Slaughterhouses (${SH_DATA.length})</button>
       <button class="stb${S.stab==='rp'?' on':''}" onclick="S.stab='rp';render()">✂️ Cut Products (${RP_DATA.length})</button>
+      <button class="stb${S.stab==='api'?' on':''}" onclick="S.stab='api';render()">🔑 API Key</button>
     </div>
   </div>
-  ${S.stab==='products'?renderSettingsProds():S.stab==='mapping'?renderSettingsMap():S.stab==='stockmap'?renderSettingsStockMap():S.stab==='sh'?renderSettingsSH():renderSettingsRP()}`;
+  ${S.stab==='products'?renderSettingsProds():S.stab==='mapping'?renderSettingsMap():S.stab==='stockmap'?renderSettingsStockMap():S.stab==='sh'?renderSettingsSH():S.stab==='rp'?renderSettingsRP():renderSettingsAPI()}`;
 }
 function renderSettingsProds(){
   const ei=S.settingsEdit;

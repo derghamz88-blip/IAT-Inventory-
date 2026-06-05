@@ -58,6 +58,43 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#ECEFF1;min-height:100v
 // ═══ PRODUCTS ═══════════════════════════════════════
 const DP=['Chicken','Liver','Liver 500','Breast','Breast 500','Whole Legs','Whole Legs 500','Thigh','Thigh 500','Drum','Drum 500','Wings','Wings 500','BREAST WITH BONE','Chicken BLW Wings','Thigh BL-SL','Thigh BL-SO','Thigh SL','Whole legs BL-SL','Whole legs BL-SO','Whole legs SL','Thigh BL-SL 500','Thigh BL-SO 500','Thigh SL 500','Whole legs BL-SL 500','Whole legs BL-SO 500','Whole legs SL 500','Heart','Heart 500','Gizzard','Gizzard 500','Whole Chicken Frozen','Whole Legs 500 FF','Breast Frozen','Thigh 500 FF','Tail','Drum 500 FF','Minced','Wings 500 FF','Bone','Kashra','Neck','Skin','Mix Chicken','Shawrma'];
 
+// ═══ RECEIPT CALCULATOR ══════════════════════════════
+const REC_SIZES=(()=>{const a=[];for(let g=400;g<=2600;g+=50)a.push(g);return a;})();
+// Receipt Cut Products — dynamic, editable in Settings
+const DEFAULT_RP=[
+  {key:'breast',    label:'BREAST',      prod:'Breast',      unit:'kg'},
+  {key:'legs',      label:'LEGS',        prod:'Whole Legs',  unit:'kg'},
+  {key:'drum',      label:'DRUM',        prod:'Drum',        unit:'kg'},
+  {key:'thigh',     label:'THIGH',       prod:'Thigh',       unit:'kg'},
+  {key:'thighbl',   label:'THIGH BL',    prod:'Thigh BL-SL', unit:'kg'},
+  {key:'wings',     label:'WINGS',       prod:'Wings',       unit:'kg'},
+  {key:'liver',     label:'LIVER KG',    prod:'Liver',       unit:'kg'},
+  {key:'gizzard',   label:'GIZZARD KG',  prod:'Gizzard',     unit:'kg'},
+  {key:'heart',     label:'HEART KG',    prod:'Heart',       unit:'kg'},
+  {key:'liver500',  label:'LIVER 500g',  prod:'Liver 500',   unit:'pcs'},
+  {key:'gizzard500',label:'GIZZARD 500g',prod:'Gizzard 500', unit:'pcs'},
+  {key:'heart500',  label:'HEART 500g',  prod:'Heart 500',   unit:'pcs'},
+  {key:'bone',      label:'BONE',        prod:'Bone',        unit:'kg'},
+  {key:'neck',      label:'NECK',        prod:'Neck',        unit:'kg'},
+  {key:'skin',      label:'SKIN',        prod:'Skin',        unit:'kg'},
+  {key:'minced',    label:'MINCED',      prod:'Minced',      unit:'kg'},
+];
+const SK_RP='chk-rp-v1';
+let RP_DATA=[];
+function loadRP(){try{const s=localStorage.getItem(SK_RP);RP_DATA=s?JSON.parse(s):JSON.parse(JSON.stringify(DEFAULT_RP));}catch{RP_DATA=JSON.parse(JSON.stringify(DEFAULT_RP));}}
+function saveRP(){localStorage.setItem(SK_RP,JSON.stringify(RP_DATA));}
+// CUT_PRODUCTS points to RP_DATA (live reference used by receipt calc)
+Object.defineProperty(window,'CUT_PRODUCTS',{get:()=>RP_DATA});
+
+// Slaughterhouse carton weights
+const DEFAULT_SH=[{name:'Al Khair',wt:0.65},{name:'Al Ulyaa',wt:0.53}];
+const SK_SH='chk-sh-v1';
+let SH_DATA=[];
+function loadSH(){try{const s=localStorage.getItem(SK_SH);SH_DATA=s?JSON.parse(s):JSON.parse(JSON.stringify(DEFAULT_SH));}catch{SH_DATA=JSON.parse(JSON.stringify(DEFAULT_SH));}}
+function saveSH(){localStorage.setItem(SK_SH,JSON.stringify(SH_DATA));}
+
+let RC={supplier:'',date:new Date().toISOString().split('T')[0],temp:'',ctns:{},sizePcs:{},smallPcs:10,largePcs:8,cuts:{}};
+
 // ═══ DEFAULT MAPPING ════════════════════════════════
 const DM=[
   {n:'Fresh whole chicken KG',p:'Chicken',m:1},{n:'Fresh breast KG',p:'Breast',m:1},{n:'Fresh breast 500 G',p:'Breast 500',m:1},{n:'Fresh whole leg KG',p:'Whole Legs',m:1},{n:'Fresh whole leg 500 G',p:'Whole Legs 500',m:1},{n:'Fresh drumstick KG',p:'Drum',m:1},{n:'Fresh drumstick 500 G',p:'Drum 500',m:1},{n:'Fresh thigh KG',p:'Thigh',m:1},{n:'Fresh thigh 500 G',p:'Thigh 500',m:1},{n:'Fresh wings KG',p:'Wings',m:1},{n:'Fresh wings 500 G',p:'Wings 500',m:1},{n:'Fresh liver 500 G',p:'Liver 500',m:1},{n:'Fresh gizzard 500 G',p:'Gizzard 500',m:1},{n:'Fresh hearts 500 G',p:'Heart 500',m:1},{n:'Fresh liver KG',p:'Liver',m:1},{n:'Fresh liver 400 G',p:'Liver',m:0.4},{n:'whole chicken mix cut KG',p:'Mix Chicken',m:1},{n:'Fresh shawarma KG',p:'Shawrma',m:1},{n:'Fresh thigh skinless boneless KG',p:'Thigh BL-SL',m:1},{n:'Fresh thigh skinless boneless 500 G',p:'Thigh BL-SL 500',m:1},{n:'Fresh whole leg B/L S/L KG',p:'Whole legs BL-SL',m:1},{n:'Fresh whole leg B/L S/L 500 G',p:'Whole legs BL-SL 500',m:1},{n:'Fresh breast WBO KG',p:'Breast',m:1},{n:'Fresh heart KG',p:'Heart',m:1},{n:'Bone kg',p:'Bone',m:1},{n:'Fresh whole chicken ctn 1000g',p:'Chicken',m:10},{n:'Fresh whole chicken ctn 1100g',p:'Chicken',m:11},{n:'Skin kg',p:'Skin',m:1},{n:'Fresh gizzard KG',p:'Gizzard',m:1},{n:'Fresh whole chicken (pcs) 1000g',p:'Chicken',m:1},{n:'Fresh whole chicken (pcs) 1100g',p:'Chicken',m:1.1},{n:'Fresh breast skinless wings on kg',p:'Breast',m:1},{n:'Whole chicken mixcut 900 gm',p:'Mix Chicken',m:0.9},{n:'Breast sliced shawarma 500 G',p:'Breast 500',m:1},{n:'Fresh whole chicken (pcs) 700g',p:'Chicken',m:0.7},{n:'Fresh whole chicken (pcs) 800g',p:'Chicken',m:0.8},{n:'Fresh whole chicken (pcs) 900g',p:'Chicken',m:0.9},{n:'Fresh whole chicken (pcs) 1200g',p:'Chicken',m:1.2},{n:'Fresh whole chicken (pcs) 1300g',p:'Chicken',m:1.3},{n:'Fresh whole chicken (pcs) 1400g',p:'Chicken',m:1.4},{n:'Fresh breast with wings kg',p:'Breast',m:1},{n:'Fresh breast skinless with Bone kg',p:'Breast',m:1},{n:'fresh whole leg B/L S/On KG',p:'Whole legs BL-SO',m:1},{n:'Frozen whole leg kg',p:'Whole Legs',m:1},{n:'Fresh thigh boneless with skin 500 G',p:'Thigh BL-SO 500',m:1},{n:'Chicken boneless kg',p:'Shawrma',m:1},{n:'Fresh thigh boneless KG',p:'Thigh BL-SO',m:1},{n:'Fresh thigh boneless skin on KG',p:'Thigh BL-SO',m:1},{n:'Whole leg frozen defrosted KG',p:'Whole Legs',m:1},{n:'Frozen wings kg',p:'Wings',m:1},{n:'Frozen drumstick KG',p:'Drum',m:1},{n:'Neck KG',p:'Neck',m:1},{n:'Frozen drumstick 900 G',p:'Drum',m:0.9},{n:'Chicken trimmings KG',p:'Chicken',m:1},{n:'SHESH TAWOOK',p:'Breast',m:1},{n:'Fresh breast with bone kg',p:'Breast',m:1},{n:'Chicken Minced KG',p:'Minced',m:1},{n:'Chicken shish tawook kg',p:'Breast',m:1},{n:'Chicken shish tawook 500 g',p:'Breast 500',m:1},{n:'Chicken cuts with bone kg',p:'Mix Chicken',m:1},{n:'Bone 500 G',p:'Bone',m:0.5},{n:'Minced Breast 500 G',p:'Breast 500',m:1},{n:'FRESH CHICKEN BONELESS 500G',p:'Shawrma',m:0.5},{n:'FRESH CHICKEN STRIPS 500G',p:'Breast 500',m:1},{n:'CHICKEN BREAST CUBES 500G',p:'Breast 500',m:1},{n:'CHICKEN BREAST FILLET 500G',p:'Breast 500',m:1},{n:'CHICKEN BREAST-MINCED 500G',p:'Breast 500',m:1},{n:'CHICKEN BREAST FILLET KG',p:'Breast',m:1},{n:'Chicken tail KG',p:'Tail',m:1},{n:'Marinated whole chicken KG',p:'Chicken',m:1},{n:'Marinated whole leg KG',p:'Whole Legs',m:1},{n:'Fresh thigh skinless bone in KG',p:'Thigh SL',m:1},{n:'Frozen thigh kg',p:'Thigh',m:1},{n:'Frozen drumstick 500 G',p:'Drum 500',m:1},{n:'Frozen thigh 500 G',p:'Thigh 500',m:1},{n:'Chicken Minced 500 G',p:'Minced',m:0.5},{n:'Frozen breast KG',p:'Breast Frozen',m:1},{n:'Fresh wings tips KG',p:'Wings',m:1},{n:'Frozen whole chicken KG',p:'Whole Legs',m:1},{n:'Fresh breast (escalaop) KG',p:'Breast',m:1},{n:'Fresh whole leg S/L 500 G',p:'Whole legs SL 500',m:1},{n:'Fresh drumstick S/L KG',p:'Drum',m:1},{n:'Fresh whole chicken (pcs) 500g',p:'Chicken',m:0.5},{n:'Fresh whole chicken (pcs) 600g',p:'Chicken',m:0.6},{n:'Fresh whole chicken (pcs) 650g',p:'Chicken',m:0.65},{n:'Fresh whole chicken (pcs) 850g',p:'Chicken',m:0.85},{n:'Fresh whole chicken (pcs) 950g',p:'Chicken',m:0.95},
@@ -236,7 +273,10 @@ function render(){
   const{tab,view}=S;
   let h=renderHdr()+renderNav()+'<div class="main">';
   const entryTabs=['inventory','receivables','returns'];
-  if(entryTabs.includes(tab)) h+=view==='list'?renderList():renderForm();
+  if(entryTabs.includes(tab)){
+    if(tab==='receivables'&&view==='receipt') h+=renderReceiptCalc();
+    else h+=view==='list'?renderList():renderForm();
+  }
   else if(tab==='sales')        h+=view==='form'?renderForm():renderSalesTab();
   else if(tab==='stocksummary') h+=view==='form'?renderForm():renderStockTab();
   else if(tab==='records')      h+=renderRecords();
@@ -260,11 +300,10 @@ function renderHdr(){
       <div class="hs"><div class="hs-v" style="color:#FFE082">${D.sales.length}</div><div class="hs-l">Sales</div></div>
     </div>
     <div style="display:flex;gap:5px;margin-left:8px">
-      <button onclick="saveToOneDrive()" title="Save to OneDrive" style="padding:5px 8px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">☁️</button>
-      <button onclick="exportData()" title="Export JSON to device" style="padding:5px 8px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">💾</button>
-      <label title="Restore from file" style="padding:5px 8px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">
-        📂<input type="file" accept=".json" onchange="importData(this)" style="display:none">
-      </label>
+      <button id="od-save-btn" onclick="odSave()" title="Save to OneDrive / cloud" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">☁️</button>
+      <button id="od-load-btn" onclick="odLoad()" title="Load from saved location" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">📂</button>
+      <button onclick="showHdrMenu()" title="More options" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">⋮</button>
+      <input id="fallback-import" type="file" accept=".json" onchange="importData(this)" style="display:none">
     </div>
   </header>`;
 }
@@ -286,7 +325,10 @@ function renderList(){
   let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:7px">
     <div><h2 style="margin:0;font-size:16px;color:${inf.color}">${inf.emoji} ${inf.ar}</h2>
     <p style="margin:2px 0 0;color:#78909C;font-size:11px">${recs.length} record(s) — tap to expand</p></div>
-    <button class="btn" style="background:${inf.color};color:#fff;padding:7px 16px" onclick="startNew()">+ New ${inf.ar}</button></div>`;
+    <div style="display:flex;gap:5px;flex-wrap:wrap">
+      ${S.tab==='receivables'?`<button class="btn" style="background:#7B1FA2;color:#fff;padding:6px 11px;font-size:11px" onclick="S.view='receipt';render()">📋 Receipt</button>`:''}
+      <button class="btn" style="background:${inf.color};color:#fff;padding:7px 16px" onclick="startNew()">+ New ${inf.ar}</button>
+    </div></div>`;
   if(!recs.length){
     h+=`<div class="empty" style="border:2px dashed ${inf.border}"><div style="font-size:36px;margin-bottom:7px">${inf.emoji}</div>
       <div style="font-size:13px;font-weight:600">No records yet</div></div>`;
@@ -437,6 +479,229 @@ function renderFT(totals){
   h+=`<tr style="background:#263238;color:#fff;font-weight:700"><td colspan="2" style="padding:7px 7px">TOTAL</td><td style="text-align:center">${tKg.toFixed(2)}</td><td style="text-align:center;background:#00695C">${tComb.toFixed(2)}</td></tr>`;
   h+=`</tbody></table></div>`;return h;
 }
+
+// ─── Receipt Calculator ───────────────────────────
+function getSizePcs(s){
+  if(RC.sizePcs[s]!==undefined)return RC.sizePcs[s];
+  return s<=1500?(RC.smallPcs||10):(RC.largePcs||8);
+}
+function getRCTotals(){
+  let chickenKG=0,totalCTN=0,cutsKG=0;
+  REC_SIZES.forEach(s=>{
+    const c=parseFloat(RC.ctns[s])||0;if(!c)return;
+    totalCTN+=c;chickenKG+=c*getSizePcs(s)*(s/1000);
+  });
+  CUT_PRODUCTS.forEach(c=>{
+    const v=parseFloat(RC.cuts[c.key])||0;if(!v)return;
+    cutsKG+=c.unit==='pcs'?v*0.5:v;
+  });
+  return{chickenKG,totalCTN,cutsKG,grand:chickenKG+cutsKG};
+}
+function updRC(){
+  requestAnimationFrame(()=>{
+    const t=getRCTotals();
+    const m={'rc-ctn':t.totalCTN.toFixed(1),'rc-chkg':t.chickenKG.toFixed(2),'rc-cuts':t.cutsKG.toFixed(2),'rc-grand':t.grand.toFixed(2)};
+    Object.entries(m).forEach(([id,v])=>{const el=document.getElementById(id);if(el)el.textContent=v;});
+  });
+}
+function renderReceiptCalc(){
+  const inf=ti('receivables');const t=getRCTotals();
+  let sizeHTML='';
+  REC_SIZES.forEach(s=>{
+    const cv=RC.ctns[s]||'';const n=parseFloat(cv)||0;
+    const pcs=getSizePcs(s);const kg=n*pcs*(s/1000);const hv=n>0;
+    const pcsSel=`<select style="padding:2px 2px;border:1px solid #E0E0E0;border-radius:4px;font-size:10px;background:#fff;color:#546E7A;width:32px" onchange="RC.sizePcs[${s}]=parseInt(this.value);updRC()">${[10,8,6,4,2,1].map(p=>`<option value="${p}"${pcs===p?' selected':''}>${p}</option>`).join('')}</select>`;
+    sizeHTML+=`<div style="display:flex;align-items:center;gap:3px;padding:3px 4px;border-radius:6px;background:${hv?'#E8F5E9':'transparent'};margin-bottom:2px">
+      <span style="font-size:11px;color:#546E7A;font-weight:600;min-width:38px">${s}g</span>
+      <input type="tel" value="${cv}" placeholder="0"
+        style="width:48px;padding:4px 2px;border:1.5px solid ${hv?'#A5D6A7':'#E0E0E0'};border-radius:5px;text-align:center;font-size:13px;font-weight:700;background:#fff;outline:none"
+        oninput="RC.ctns[${s}]=this.value" onblur="updRC()" enterkeyhint="next">
+      ${pcsSel}
+      <span style="font-size:9px;color:${hv?'#2E7D32':'#B0BEC5'};min-width:40px;text-align:right">${hv?kg.toFixed(1)+' kg':''}</span>
+    </div>`;
+  });
+  let cutHTML='';
+  CUT_PRODUCTS.forEach(c=>{
+    const val=RC.cuts[c.key]||'';const hv=parseFloat(val)>0;
+    const isPcs=c.unit==='pcs';
+    const kgShow=hv&&isPcs?(parseFloat(val)*0.5).toFixed(1)+' kg':'';
+    cutHTML+=`<div style="display:flex;align-items:center;gap:4px;padding:4px 7px;border-radius:7px;background:${hv?'#FFEBEE':'transparent'};margin-bottom:3px;border:1px solid ${hv?'#EF9A9A':'transparent'}">
+      <span style="font-size:10px;font-weight:700;color:#C62828;min-width:78px">${c.label}</span>
+      <input type="tel" value="${val}" placeholder="0"
+        style="flex:1;padding:4px 4px;border:1.5px solid ${hv?'#EF9A9A':'#E0E0E0'};border-radius:5px;text-align:center;font-size:12px;background:#fff;outline:none"
+        oninput="RC.cuts['${c.key}']=this.value" onblur="updRC()" enterkeyhint="next">
+      <span style="font-size:9px;color:#90A4AE;min-width:22px">${isPcs?'pcs':'KG'}</span>
+      ${kgShow?`<span style="font-size:9px;color:#2E7D32;font-weight:600">${kgShow}</span>`:''}
+    </div>`;
+  });
+  return`<div class="card" style="border:1.5px solid ${inf.border}">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+      <h2 style="margin:0;font-size:14px;color:${inf.color}">📋 Fresh Chicken Receipt</h2>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">
+        <button class="btn" style="background:#ECEFF1;color:#546E7A;font-size:11px" onclick="S.view='list';render()">← Back</button>
+        <label class="btn" style="background:#7B1FA2;color:#fff;font-size:11px;cursor:pointer" title="Take photo">📷<input type="file" accept="image/*" capture="environment" onchange="scanReceiptAI(this)" style="display:none"></label>
+        <label class="btn" style="background:#5C6BC0;color:#fff;font-size:11px;cursor:pointer" title="Upload from gallery">🖼️<input type="file" accept="image/*" onchange="scanReceiptAI(this)" style="display:none"></label>
+        <button class="btn" style="background:#E65100;color:#fff;font-size:11px" onclick="showCartonCalc()">⚖️ Verify</button>
+        <button class="btn" style="background:${inf.color};color:#fff;padding:7px 14px;font-size:11px" onclick="saveReceiptAsRec()">💾 Save</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+      <div style="flex:2;min-width:120px"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">SUPPLIER</div>
+        <input class="fi" type="text" placeholder="Supplier name" value="${RC.supplier||''}" oninput="RC.supplier=this.value" style="width:100%;font-size:12px"></div>
+      <div><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">DATE</div>
+        <input class="fi" type="date" value="${RC.date}" onchange="RC.date=this.value" style="font-size:12px"></div>
+      <div style="width:58px"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">TEMP °C</div>
+        <input class="fi" type="number" placeholder="—" value="${RC.temp||''}" oninput="RC.temp=this.value" style="width:100%;font-size:12px"></div>
+    </div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;background:#FFF3E0;padding:7px 10px;border-radius:8px;align-items:center">
+      <span style="font-size:10px;font-weight:700;color:#1565C0">≤1500g pcs/CTN:</span>
+      ${[10,8,6,4].map(n=>`<button class="btn" style="background:${RC.smallPcs===n?'#1565C0':'#ECEFF1'};color:${RC.smallPcs===n?'#fff':'#546E7A'};padding:3px 9px;font-size:12px;font-weight:700" onclick="RC.smallPcs=${n};render()">${n}</button>`).join('')}
+      <span style="font-size:10px;font-weight:700;color:#E65100;margin-left:8px">&gt;1500g:</span>
+      ${[10,8,6,4].map(n=>`<button class="btn" style="background:${RC.largePcs===n?'#E65100':'#ECEFF1'};color:${RC.largePcs===n?'#fff':'#546E7A'};padding:3px 9px;font-size:12px;font-weight:700" onclick="RC.largePcs=${n};render()">${n}</button>`).join('')}
+    </div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap">
+      <span class="badge" style="background:#E3F2FD;color:#1565C0">CTN: <b id="rc-ctn">${t.totalCTN.toFixed(1)}</b></span>
+      <span class="badge" style="background:#E8F5E9;color:#2E7D32">🐔 <b id="rc-chkg">${t.chickenKG.toFixed(2)}</b> KG</span>
+      <span class="badge" style="background:#FFEBEE;color:#C62828">✂️ <b id="rc-cuts">${t.cutsKG.toFixed(2)}</b> KG</span>
+      <span class="badge" style="background:#E0F2F1;color:#00695C;font-size:12px;font-weight:700">Total: <b id="rc-grand">${t.grand.toFixed(2)}</b> KG</span>
+    </div>
+  </div>
+  <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
+    <div style="flex:1;min-width:185px"><div class="card">
+      <div style="font-size:11px;font-weight:700;color:#1565C0;margin-bottom:7px">🐔 Whole Chicken (CTN)</div>
+      ${sizeHTML}
+    </div></div>
+    <div style="flex:1;min-width:175px"><div class="card">
+      <div style="font-size:11px;font-weight:700;color:#C62828;margin-bottom:7px">✂️ Cut Products</div>
+      ${cutHTML}
+    </div></div>
+  </div>`;
+}
+function saveReceiptAsRec(){
+  const t=getRCTotals();
+  if(t.grand===0){alert('No data entered!');return;}
+  const items=emptyItems();
+  if(t.chickenKG>0)items['Chicken']={kg:t.chickenKG.toFixed(3),pcs:''};
+  CUT_PRODUCTS.forEach(c=>{
+    const v=parseFloat(RC.cuts[c.key])||0;if(!v)return;
+    if(c.unit==='pcs')items[c.prod]={kg:'',pcs:v.toFixed(0)};
+    else items[c.prod]={kg:v.toFixed(3),pcs:''};
+  });
+  const r={id:gid(),date:RC.date,notes:'Receivables'+(RC.supplier?' — '+RC.supplier:''),items:compactItems(items)};
+  D.receivables=[r,...D.receivables];save();
+  RC={supplier:'',date:new Date().toISOString().split('T')[0],temp:'',ctns:{},sizePcs:{},largePcs:8,cuts:{}};
+  S.view='list';render();showToast('✅ Receipt saved as Receivable!');
+}
+
+// ─── AI Receipt Scanner ───────────────────────────
+async function scanReceiptAI(input){
+  const file=input.files[0];if(!file)return;input.value='';
+  showToast('🔍 Scanning with AI...');
+  try{
+    const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
+          {type:'text',text:'Analyze this Fresh Chicken Receipt Report image. Return ONLY a JSON object with no markdown:\n{"supplier":"name or null","date":"YYYY-MM-DD or null","ctns":{"1300":32,"1350":17},"cuts":{"breast":0,"legs":0,"drum":0,"thigh":0,"thighbl":0,"wings":0,"liver":0,"gizzard":0,"heart":0,"bone":0}}\nOnly include sizes that have actual numbers. cuts in KG. Omit zero values.'}
+        ]}]
+      })
+    });
+    const d=await resp.json();
+    const txt=d.content.map(x=>x.text||'').join('').replace(/```json|```/g,'').trim();
+    const result=JSON.parse(txt);
+    if(result.supplier)RC.supplier=result.supplier;
+    if(result.date)RC.date=result.date;
+    if(result.ctns)Object.entries(result.ctns).forEach(([k,v])=>{if(v)RC.ctns[k]=String(v);});
+    if(result.cuts)Object.entries(result.cuts).forEach(([k,v])=>{if(v&&CUT_PRODUCTS.find(c=>c.key===k))RC.cuts[k]=String(v);});
+    render();showToast('✅ Scanned! Please verify.');
+  }catch(e){
+    if(e.message.includes('fetch')||e.message.includes('Failed')){
+      alert('❌ Scan requires internet connection AND must be opened from:\nhttps://derghamz88-blip.github.io/IAT-Inventory-/chicken-inventory.html\n\nCannot scan from a downloaded local file.');
+    } else {
+      alert('Scan error: '+e.message);
+    }
+  }
+}
+
+// ─── Carton Weight Verification (Multi-row) ──────
+let CWC_ROWS=[{id:1,sh:'',ctns:'',gross:'',cwt:''}];let CWC_ID=1;
+function showCartonCalc(){
+  const ex=document.getElementById('cwc-modal');if(ex){ex.remove();return;}
+  CWC_ROWS=[{id:1,sh:'',ctns:'',gross:'',cwt:''}];CWC_ID=1;
+  const m=document.createElement('div');m.id='cwc-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;overflow-y:auto;display:flex;align-items:flex-start;justify-content:center;padding:20px 16px';
+  m.innerHTML=`<div style="background:#fff;border-radius:14px;padding:18px;max-width:400px;width:100%;box-shadow:0 8px 30px rgba(0,0,0,.25)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:15px;font-weight:700;color:#E65100">⚖️ Carton Weight Checker</div>
+      <button onclick="document.getElementById('cwc-modal').remove()" style="border:none;background:none;font-size:20px;cursor:pointer;color:#90A4AE">×</button>
+    </div>
+    <div id="cwc-rows"></div>
+    <button onclick="addCWCRow()" style="width:100%;padding:8px;background:#FFF3E0;color:#E65100;border:1px dashed #FFB74D;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;margin-bottom:10px">+ Add another batch</button>
+    <div id="cwc-total" style="background:#E0F2F1;border-radius:9px;padding:10px;margin-bottom:10px"></div>
+    <div style="margin-bottom:10px"><div style="font-size:10px;color:#90A4AE;margin-bottom:3px">Compare with receipt total (KG)</div>
+      <input id="cwc-cmp" class="fi" type="number" step="any" placeholder="Optional" style="width:100%;font-size:12px" oninput="updCWC()"></div>
+    <div id="cwc-diff" style="display:none;border-radius:8px;padding:10px;margin-bottom:10px;text-align:center"></div>
+    <button onclick="document.getElementById('cwc-modal').remove()" style="width:100%;padding:10px;background:#263238;color:#fff;border:none;border-radius:9px;cursor:pointer;font-size:13px;font-weight:600">Done</button>
+  </div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click',e=>{if(e.target===m)m.remove();});
+  renderCWCRows();
+}
+function calcCWCRow(row){
+  let ew=0;
+  if(row.sh&&row.sh!=='custom'){const s=SH_DATA.find(x=>x.name===row.sh);ew=s?s.wt:0;}
+  else if(row.sh==='custom')ew=parseFloat(row.cwt)||0;
+  const n=parseFloat(row.ctns)||0,g=parseFloat(row.gross)||0;
+  return{empty:n*ew,net:g>0?g-n*ew:0};
+}
+function renderCWCRows(){
+  const c=document.getElementById('cwc-rows');if(!c)return;
+  const shOpts=(sel)=>['<option value="">— Select —</option>',...SH_DATA.map(s=>`<option value="${s.name}"${sel===s.name?' selected':''}>${s.name} (${s.wt})</option>`),'<option value="custom"'+( sel==='custom'?' selected':'')+'>Custom...</option>'].join('');
+  c.innerHTML=CWC_ROWS.map((row,i)=>{
+    const r=calcCWCRow(row);
+    return`<div style="border:1px solid #ECEFF1;border-radius:10px;padding:10px;margin-bottom:8px;background:#FAFAFA">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+        <span style="font-size:11px;font-weight:700;color:#E65100">Batch ${i+1}</span>
+        ${CWC_ROWS.length>1?`<button onclick="removeCWCRow(${row.id})" style="border:none;background:none;font-size:14px;cursor:pointer;color:#EF9A9A;padding:2px 5px">× remove</button>`:''}
+      </div>
+      <div style="margin-bottom:6px">
+        <select class="fi" style="width:100%;font-size:11px" onchange="updCWCRow(${row.id},'sh',this.value)">${shOpts(row.sh)}</select>
+      </div>
+      ${row.sh==='custom'?`<div style="margin-bottom:6px"><input class="fi" type="tel" step="0.001" placeholder="Empty CTN weight KG" value="${row.cwt||''}" style="width:100%;font-size:11px" oninput="setCWCVal(${row.id},'cwt',this.value)" onblur="renderCWCRows()"></div>`:''}            <div style="display:flex;gap:6px">
+        <div style="flex:1"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">No. of CTN</div>
+          <input class="fi" type="tel" placeholder="0" value="${row.ctns}" style="width:100%;font-size:12px" oninput="setCWCVal(${row.id},'ctns',this.value)" onblur="renderCWCRows()"></div>
+        <div style="flex:1"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Gross Weight (KG)</div>
+          <input class="fi" type="tel" placeholder="0.00" value="${row.gross}" style="width:100%;font-size:12px" oninput="setCWCVal(${row.id},'gross',this.value)" onblur="renderCWCRows()"></div>
+      </div>
+      ${r.net>0?`<div style="margin-top:6px;display:flex;justify-content:space-between;background:#F5F5F5;padding:5px 9px;border-radius:7px">
+        <span style="font-size:10px;color:#546E7A">Empty: ${r.empty.toFixed(3)} KG</span>
+        <span style="font-size:12px;font-weight:700;color:#2E7D32">Net: ${r.net.toFixed(3)} KG</span>
+      </div>`:''}
+    </div>`;
+  }).join('');
+  updCWCTotal();
+}
+function updCWCTotal(){
+  let tot=0;CWC_ROWS.forEach(r=>{tot+=calcCWCRow(r).net;});
+  const el=document.getElementById('cwc-total');
+  if(el)el.innerHTML=`<div style="display:flex;justify-content:space-between"><span style="font-size:13px;font-weight:700">Total Net Weight</span><span style="font-size:17px;font-weight:700;color:#00695C">${tot.toFixed(3)} KG</span></div>`;
+  const cmp=parseFloat(document.getElementById('cwc-cmp')?.value)||0;
+  const dd=document.getElementById('cwc-diff');
+  if(dd&&cmp>0){
+    const d=tot-cmp,p=d/cmp*100;dd.style.display='block';
+    dd.style.background=Math.abs(d)<0.5?'#E8F5E9':'#FFF3E0';
+    dd.innerHTML=`<div style="font-size:11px;color:#546E7A;margin-bottom:3px">Receipt: ${cmp} KG | Net: ${tot.toFixed(3)} KG</div>
+      <div style="font-size:16px;font-weight:700;color:${Math.abs(d)<0.5?'#2E7D32':'#E65100'}">${d>=0?'+':''}${d.toFixed(3)} KG (${p>=0?'+':''}${p.toFixed(1)}%)</div>`;
+  }else if(dd)dd.style.display='none';
+}
+function updCWCRow(id,f,v){const r=CWC_ROWS.find(x=>x.id===id);if(r){r[f]=v;renderCWCRows();}}
+function setCWCVal(id,f,v){const r=CWC_ROWS.find(x=>x.id===id);if(r)r[f]=v;}
+function updCWC(){updCWCTotal();}
+function addCWCRow(){CWC_ID++;CWC_ROWS.push({id:CWC_ID,sh:'',ctns:'',gross:'',cwt:''});renderCWCRows();}
+function removeCWCRow(id){CWC_ROWS=CWC_ROWS.filter(r=>r.id!==id);renderCWCRows();}
+
 
 // ─── Records Overview ─────────────────────────────
 function renderRecords(){
@@ -664,9 +929,11 @@ function renderSettings(){
       <button class="stb${S.stab==='products'?' on':''}" onclick="S.stab='products';render()">📋 Products (${PRODUCTS.length})</button>
       <button class="stb${S.stab==='mapping'?' on':''}" onclick="S.stab='mapping';render()">📤 Sales Map (${MD.length})</button>
       <button class="stb${S.stab==='stockmap'?' on':''}" onclick="S.stab='stockmap';render()">📊 Stock Map (${SMD.length})</button>
+      <button class="stb${S.stab==='sh'?' on':''}" onclick="S.stab='sh';render()">🏭 Slaughterhouses (${SH_DATA.length})</button>
+      <button class="stb${S.stab==='rp'?' on':''}" onclick="S.stab='rp';render()">✂️ Cut Products (${RP_DATA.length})</button>
     </div>
   </div>
-  ${S.stab==='products'?renderSettingsProds():S.stab==='mapping'?renderSettingsMap():renderSettingsStockMap()}`;
+  ${S.stab==='products'?renderSettingsProds():S.stab==='mapping'?renderSettingsMap():S.stab==='stockmap'?renderSettingsStockMap():S.stab==='sh'?renderSettingsSH():renderSettingsRP()}`;
 }
 function renderSettingsProds(){
   const ei=S.settingsEdit;
@@ -1059,6 +1326,98 @@ function saveSmEdit(i){const n=document.getElementById('sme-n')?.value.trim(),p=
 function deleteSm(i){if(!confirm('Delete?'))return;SMD.splice(i,1);saveStockMapping();render();}
 function addSm(){const n=document.getElementById('smn-n')?.value.trim(),p=document.getElementById('smn-p')?.value,m=parseFloat(document.getElementById('smn-m')?.value)||1;if(!n||!p){alert('Fill all fields');return;}SMD.unshift({n,p,m});saveStockMapping();render();}
 function resetStockMap(){if(!confirm('Reset stock mapping to defaults?'))return;SMD=JSON.parse(JSON.stringify(DSM));saveStockMapping();render();}
+
+// ─── Slaughterhouses Settings ─────────────────────
+function renderSettingsSH(){
+  const ei=S.shEdit;
+  let h=`<div class="card">
+    <p style="font-size:11px;color:#78909C;margin-bottom:10px">Empty carton weights — used in the ⚖️ Carton Weight Checker on the receipt form.</p>
+    <div style="border-radius:8px;border:1px solid #ECEFF1;overflow:hidden;margin-bottom:12px">
+    <table class="mtbl"><thead><tr>
+      <th>#</th><th>Slaughterhouse Name</th><th style="width:110px">Empty CTN Weight (KG)</th><th style="width:60px">Actions</th>
+    </tr></thead><tbody>`;
+  SH_DATA.forEach((sh,i)=>{
+    if(ei===i){
+      h+=`<tr style="background:#FFF3E0"><td style="color:#B0BEC5;font-size:10px">${i+1}</td>
+        <td><input class="fi" id="sh-n" type="text" value="${sh.name}" style="width:100%;padding:3px 6px;font-size:11px"></td>
+        <td><input class="fi" id="sh-w" type="number" step="0.001" value="${sh.wt}" style="width:100%;padding:3px 6px;font-size:11px"></td>
+        <td><button class="btn" style="background:#2E7D32;color:#fff;padding:2px 6px;font-size:10px" onclick="saveSHEdit(${i})">✓</button>
+            <button class="btn" style="background:#ECEFF1;color:#546E7A;padding:2px 6px;font-size:10px" onclick="S.shEdit=null;render()">✗</button></td>
+      </tr>`;
+    } else {
+      h+=`<tr><td style="color:#B0BEC5;font-size:10px">${i+1}</td>
+        <td style="font-size:12px;font-weight:600">${sh.name}</td>
+        <td style="text-align:center;font-size:12px;font-weight:700;color:#E65100">${sh.wt} KG</td>
+        <td><button class="btn" style="background:#FFF3E0;color:#E65100;padding:2px 5px;font-size:10px" onclick="S.shEdit=${i};render()">✏️</button>
+            <button class="btn" style="background:#FFEBEE;color:#C62828;padding:2px 5px;font-size:10px" onclick="deleteSH(${i})">🗑️</button></td>
+      </tr>`;
+    }
+  });
+  if(!SH_DATA.length)h+=`<tr><td colspan="4" style="text-align:center;padding:16px;color:#90A4AE">No slaughterhouses yet</td></tr>`;
+  h+=`</tbody></table></div>
+  <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:flex-end">
+    <div style="flex:2;min-width:140px"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Name</div>
+      <input class="fi" id="sh-new-n" type="text" placeholder="e.g. Al Khair" style="width:100%;font-size:11px"></div>
+    <div style="width:100px"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Empty CTN weight (KG)</div>
+      <input class="fi" id="sh-new-w" type="number" step="0.001" placeholder="0.000" style="width:100%;font-size:11px"></div>
+    <button class="btn" style="background:#E65100;color:#fff;font-size:11px;align-self:flex-end" onclick="addSH()">+ Add</button>
+    <button class="btn" style="background:#455A64;color:#fff;font-size:11px;align-self:flex-end" onclick="resetSH()">🔄 Reset</button>
+  </div></div>`;return h;
+}
+function saveSHEdit(i){const n=document.getElementById('sh-n')?.value.trim(),w=parseFloat(document.getElementById('sh-w')?.value)||0;if(!n||!w){alert('Fill all fields');return;}SH_DATA[i]={name:n,wt:w};saveSH();S.shEdit=null;render();}
+function deleteSH(i){if(!confirm('Delete?'))return;SH_DATA.splice(i,1);saveSH();render();}
+function addSH(){const n=document.getElementById('sh-new-n')?.value.trim(),w=parseFloat(document.getElementById('sh-new-w')?.value)||0;if(!n||!w){alert('Fill all fields');return;}SH_DATA.push({name:n,wt:w});saveSH();render();}
+function resetSH(){if(!confirm('Reset to defaults?'))return;SH_DATA=JSON.parse(JSON.stringify(DEFAULT_SH));saveSH();render();}
+
+// ─── Receipt Cut Products Settings ───────────────
+function renderSettingsRP(){
+  const ei=S.rpEdit;
+  let h=`<div class="card">
+    <p style="font-size:11px;color:#78909C;margin-bottom:10px">Products available in the Receipt Calculator cut products section.</p>
+    <div style="border-radius:8px;border:1px solid #ECEFF1;overflow:hidden;margin-bottom:12px">
+    <table class="mtbl"><thead><tr>
+      <th>#</th><th>Label</th><th>→ Product</th><th style="width:42px">Unit</th><th style="width:55px">Actions</th>
+    </tr></thead><tbody>`;
+  RP_DATA.forEach((rp,i)=>{
+    if(ei===i){
+      h+=`<tr style="background:#E8F5E9"><td style="color:#B0BEC5;font-size:10px">${i+1}</td>
+        <td><input class="fi" id="rp-l" type="text" value="${rp.label}" style="width:100%;padding:3px 6px;font-size:11px"></td>
+        <td><select class="fi" id="rp-p" style="width:100%;padding:3px 5px;font-size:10px">${PRODUCTS.map(p=>`<option value="${p}"${p===rp.prod?' selected':''}>${p}</option>`).join('')}</select></td>
+        <td><select class="fi" id="rp-u" style="width:100%;padding:3px 4px;font-size:10px"><option value="kg"${rp.unit==='kg'?' selected':''}>KG</option><option value="pcs"${rp.unit==='pcs'?' selected':''}>pcs</option></select></td>
+        <td><button class="btn" style="background:#2E7D32;color:#fff;padding:2px 5px;font-size:10px" onclick="saveRPEdit(${i})">✓</button>
+            <button class="btn" style="background:#ECEFF1;color:#546E7A;padding:2px 5px;font-size:10px" onclick="S.rpEdit=null;render()">✗</button></td>
+      </tr>`;
+    } else {
+      h+=`<tr><td style="color:#B0BEC5;font-size:10px">${i+1}</td>
+        <td style="font-size:11px;font-weight:700;color:#C62828">${rp.label}</td>
+        <td style="font-size:10px;color:#1565C0">${rp.prod}</td>
+        <td style="text-align:center;font-size:10px">${rp.unit}</td>
+        <td style="display:flex;gap:2px">
+          <button class="btn" style="background:#ECEFF1;color:#546E7A;padding:2px 4px;font-size:10px" onclick="moveRP(${i},-1)" ${i===0?'disabled':''}>↑</button>
+          <button class="btn" style="background:#ECEFF1;color:#546E7A;padding:2px 4px;font-size:10px" onclick="moveRP(${i},1)" ${i===RP_DATA.length-1?'disabled':''}>↓</button>
+          <button class="btn" style="background:#E8F5E9;color:#2E7D32;padding:2px 4px;font-size:10px" onclick="S.rpEdit=${i};render()">✏️</button>
+          <button class="btn" style="background:#FFEBEE;color:#C62828;padding:2px 4px;font-size:10px" onclick="deleteRP(${i})">🗑️</button>
+        </td>
+      </tr>`;
+    }
+  });
+  h+=`</tbody></table></div>
+  <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:flex-end">
+    <div style="min-width:90px"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Label</div>
+      <input class="fi" id="rp-new-l" type="text" placeholder="e.g. LIVER" style="width:100%;font-size:11px"></div>
+    <div style="flex:1;min-width:110px"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">→ Product</div>
+      <select class="fi" id="rp-new-p" style="width:100%;font-size:11px">${PRODUCTS.map(p=>`<option value="${p}">${p}</option>`).join('')}</select></div>
+    <div style="width:60px"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Unit</div>
+      <select class="fi" id="rp-new-u" style="width:100%;font-size:11px"><option value="kg">KG</option><option value="pcs">pcs</option></select></div>
+    <button class="btn" style="background:#C62828;color:#fff;font-size:11px;align-self:flex-end" onclick="addRP()">+ Add</button>
+    <button class="btn" style="background:#455A64;color:#fff;font-size:11px;align-self:flex-end" onclick="resetRP()">🔄 Reset</button>
+  </div></div>`;return h;
+}
+function saveRPEdit(i){const l=document.getElementById('rp-l')?.value.trim(),p=document.getElementById('rp-p')?.value,u=document.getElementById('rp-u')?.value||'kg';if(!l||!p)return;RP_DATA[i]={...RP_DATA[i],label:l,prod:p,unit:u};saveRP();S.rpEdit=null;render();}
+function deleteRP(i){if(!confirm('Delete?'))return;RP_DATA.splice(i,1);saveRP();render();}
+function moveRP(i,d){const ni=i+d;if(ni<0||ni>=RP_DATA.length)return;[RP_DATA[i],RP_DATA[ni]]=[RP_DATA[ni],RP_DATA[i]];saveRP();render();}
+function addRP(){const l=document.getElementById('rp-new-l')?.value.trim(),p=document.getElementById('rp-new-p')?.value,u=document.getElementById('rp-new-u')?.value||'kg';if(!l||!p){alert('Fill all fields');return;}const key='rp_'+Date.now().toString(36);RP_DATA.push({key,label:l,prod:p,unit:u});saveRP();render();}
+function resetRP(){if(!confirm('Reset cut products to defaults?'))return;RP_DATA=JSON.parse(JSON.stringify(DEFAULT_RP));saveRP();render();}
 // Excel
 function processExcel(buf,name){
   try{
@@ -1484,9 +1843,35 @@ function exportRecordXLSX(id){
   XLSX.writeFile(wb,`${inf.label}-${r.date}${r.notes?'-'+r.notes:''}.xlsx`.replace(/\s+/g,'-'));
 }
 
-// ═══ EXPORT / IMPORT + ONEDRIVE ══════════════════════
+function showHdrMenu(){
+  const existing=document.getElementById('hdr-menu');
+  if(existing){existing.remove();return;}
+  const m=document.createElement('div');
+  m.id='hdr-menu';
+  m.style.cssText='position:fixed;top:52px;right:8px;background:#fff;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.2);z-index:9999;min-width:200px;overflow:hidden';
+  m.innerHTML=`
+    <div style="padding:6px 0">
+      <div style="padding:4px 10px;font-size:10px;color:#90A4AE;font-weight:600">CLOUD BACKUP</div>
+      <button onclick="odSave();this.closest('#hdr-menu').remove()" style="width:100%;padding:10px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px"><span>☁️</span> Save to current location</button>
+      <button onclick="odLoad();this.closest('#hdr-menu').remove()" style="width:100%;padding:10px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px"><span>📂</span> Load from saved location</button>
+      <button onclick="odSave(true);this.closest('#hdr-menu').remove()" style="width:100%;padding:10px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;color:#546E7A"><span>📍</span> Save to new location...</button>
+      <button onclick="odLoad(true);this.closest('#hdr-menu').remove()" style="width:100%;padding:10px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;color:#546E7A"><span>🔍</span> Load from different file...</button>
+      <div style="height:1px;background:#ECEFF1;margin:4px 0"></div>
+      <div style="padding:4px 10px;font-size:10px;color:#90A4AE;font-weight:600">LOCAL BACKUP</div>
+      <button onclick="exportData();this.closest('#hdr-menu').remove()" style="width:100%;padding:10px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px"><span>💾</span> Export JSON (download)</button>
+      <label style="width:100%;padding:10px 14px;display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+        <span>📤</span> Import JSON (upload)
+        <input type="file" accept=".json" onchange="importData(this);document.getElementById('hdr-menu')?.remove()" style="display:none">
+      </label>
+      <div style="height:1px;background:#ECEFF1;margin:4px 0"></div>
+      <button onclick="clearHandle();showToast('Location cleared');this.closest('#hdr-menu').remove()" style="width:100%;padding:10px 14px;border:none;background:none;text-align:left;font-size:12px;cursor:pointer;color:#C62828;display:flex;align-items:center;gap:8px"><span>🗑️</span> Clear saved location</button>
+    </div>`;
+  document.body.appendChild(m);
+  // Close on outside click
+  setTimeout(()=>document.addEventListener('click',function h(e){if(!m.contains(e.target)){m.remove();document.removeEventListener('click',h);}},true),100);
+}
 function exportData(){
-  const data={version:3,exportDate:new Date().toISOString(),PRODUCTS,MD,SMD,D,FA,FB};
+  const data={version:3,exportDate:new Date().toISOString(),PRODUCTS,MD,SMD,SH_DATA,D,FA,FB};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const fname='chicken-inventory-'+new Date().toISOString().split('T')[0]+'.json';
@@ -1496,47 +1881,120 @@ function exportData(){
   return fname;
 }
 
-function saveToOneDrive(){
-  const fname=exportData();
-  const modal=document.createElement('div');
-  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
-  modal.innerHTML=`<div style="background:#fff;border-radius:16px;padding:22px;max-width:360px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.3)">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-      <span style="font-size:28px">☁️</span>
-      <div><div style="font-size:15px;font-weight:700;color:#0078D4">Save to OneDrive</div>
-        <div style="font-size:11px;color:#546E7A">Downloaded: <b>${fname}</b></div></div>
-    </div>
-    <div style="background:#E3F2FD;border-radius:10px;padding:14px;margin-bottom:10px">
-      <div style="font-size:12px;font-weight:700;color:#1565C0;margin-bottom:7px">📱 On Phone:</div>
-      <div style="font-size:12px;color:#37474F;line-height:1.9">
-        1. Open <b>Downloads</b> on your phone<br>
-        2. Hold on the file → <b>Share</b><br>
-        3. Choose <b>OneDrive</b> app<br>
-        4. Pick your folder → <b>Save</b>
-      </div>
-    </div>
-    <div style="background:#E8F5E9;border-radius:10px;padding:14px;margin-bottom:14px">
-      <div style="font-size:12px;font-weight:700;color:#2E7D32;margin-bottom:7px">💻 On Computer:</div>
-      <div style="font-size:12px;color:#37474F;line-height:1.9">
-        1. File is in your <b>Downloads</b> folder<br>
-        2. Move/copy it to your <b>OneDrive folder</b><br>
-        <span style="color:#78909C">— or upload via web ↓</span>
-      </div>
-    </div>
-    <div style="display:flex;gap:8px">
-      <button onclick="window.open('https://onedrive.live.com/upload','_blank')"
-        style="flex:1;padding:10px;background:#0078D4;color:#fff;border:none;border-radius:9px;cursor:pointer;font-size:13px;font-weight:600">
-        🌐 Open OneDrive
-      </button>
-      <button onclick="this.closest('[style*=inset]').remove()"
-        style="flex:1;padding:10px;background:#ECEFF1;color:#546E7A;border:none;border-radius:9px;cursor:pointer;font-size:13px;font-weight:600">
-        ✓ Done
-      </button>
-    </div>
-  </div>`;
-  document.body.appendChild(modal);
-  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+// ═══ FILE SYSTEM ACCESS API (OneDrive / Any Location) ══
+// Stores the file handle in IndexedDB so path is remembered
+
+function openHandleDB(){
+  return new Promise((res,rej)=>{
+    const req=indexedDB.open('chk-fsh-v1',1);
+    req.onupgradeneeded=e=>e.target.result.createObjectStore('h');
+    req.onsuccess=e=>res(e.target.result);
+    req.onerror=()=>rej(req.error);
+  });
 }
+async function storeHandle(h){
+  const db=await openHandleDB();
+  return new Promise(res=>{const tx=db.transaction('h','readwrite');tx.objectStore('h').put(h,'bk');tx.oncomplete=res;});
+}
+async function getHandle(){
+  const db=await openHandleDB();
+  return new Promise(res=>{const tx=db.transaction('h');const r=tx.objectStore('h').get('bk');r.onsuccess=()=>res(r.result);r.onerror=()=>res(null);});
+}
+async function clearHandle(){
+  const db=await openHandleDB();
+  return new Promise(res=>{const tx=db.transaction('h','readwrite');tx.objectStore('h').delete('bk');tx.oncomplete=res;});
+}
+async function verifyHandle(h,mode){
+  try{
+    const p=await h.queryPermission({mode});
+    if(p==='granted')return true;
+    const r=await h.requestPermission({mode});
+    return r==='granted';
+  }catch{return false;}
+}
+
+async function odSave(forceNew=false){
+  const data={version:3,exportDate:new Date().toISOString(),PRODUCTS,MD,SMD,SH_DATA,D,FA,FB};
+  const json=JSON.stringify(data,null,2);
+  const blob=new Blob([json],{type:'application/json'});
+  const fname='IAT-Inventory-Backup.json';
+  const file=new File([blob],fname,{type:'application/json'});
+
+  // ── Mobile: use native share sheet (includes OneDrive app) ──
+  if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
+    try{
+      await navigator.share({files:[file],title:'IAT Inventory Backup'});
+      showToast('📤 Share sheet opened — choose OneDrive!');
+    }catch(e){if(e.name!=='AbortError')alert('Error: '+e.message);}
+    return;
+  }
+
+  // ── Desktop: File System Access API with remembered handle ──
+  if(window.showSaveFilePicker){
+    const btn=document.getElementById('od-save-btn');
+    if(btn){btn.textContent='⏳';btn.disabled=true;}
+    try{
+      let h=forceNew?null:await getHandle();
+      if(h){const ok=await verifyHandle(h,'readwrite');if(!ok)h=null;}
+      if(!h){
+        h=await window.showSaveFilePicker({
+          suggestedName:fname,
+          types:[{description:'Inventory Backup',accept:{'application/json':['.json']}}],
+        });
+        await storeHandle(h);
+      }
+      const w=await h.createWritable();
+      await w.write(json);await w.close();
+      showToast('✅ Saved: '+h.name);
+    }catch(e){if(e.name!=='AbortError')alert('Save error: '+e.message);}
+    if(btn){btn.textContent='☁️';btn.disabled=false;}
+    return;
+  }
+
+  // ── Fallback: download ──
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=fname;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('💾 Downloaded — save to OneDrive manually');
+}
+
+async function odLoad(forceNew=false){
+  // ── Desktop: File System Access API ──
+  if(window.showOpenFilePicker){
+    const btn=document.getElementById('od-load-btn');
+    if(btn){btn.textContent='⏳';btn.disabled=true;}
+    try{
+      let h=forceNew?null:await getHandle();
+      if(h){const ok=await verifyHandle(h,'read');if(!ok)h=null;}
+      if(!h){
+        const[picked]=await window.showOpenFilePicker({
+          types:[{description:'Inventory Backup',accept:{'application/json':['.json']}}],
+        });
+        h=picked;await storeHandle(h);
+      }
+      const file=await h.getFile();
+      const data=JSON.parse(await file.text());
+      if(!data.version||!data.D){alert('Invalid file');return;}
+      if(!confirm('Restore from: '+h.name+'?\nReplaces all current data.'))return;
+      applyBackup(data);
+      showToast('✅ Restored from '+h.name);
+    }catch(e){if(e.name!=='AbortError')alert('Load error: '+e.message);}
+    if(btn){btn.textContent='📂';btn.disabled=false;}
+    return;
+  }
+
+  // ── Mobile/Fallback: file input ──
+  document.getElementById('fallback-import')?.click();
+}
+
+function showToast(msg){
+  const t=document.createElement('div');
+  t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#263238;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;z-index:9999;box-shadow:0 4px 14px rgba(0,0,0,.3);white-space:nowrap';
+  t.textContent=msg;document.body.appendChild(t);
+  setTimeout(()=>t.remove(),3000);
+}
+
 
 function importData(input){
   const f=input.files[0];if(!f)return;
@@ -1560,7 +2018,7 @@ function importData(input){
 }
 
 // ═══ BOOT ════════════════════════════════════════════
-loadProducts();loadMapping();loadStockMapping();load();loadFormulas();migrateCompact();render();
+loadProducts();loadMapping();loadStockMapping();loadSH();loadRP();load();loadFormulas();migrateCompact();render();
 </script>
 </body>
 </html>

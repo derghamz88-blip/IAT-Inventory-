@@ -1,0 +1,1566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🐔 Chicken Inventory</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:#ECEFF1;min-height:100vh}
+.hdr{background:linear-gradient(135deg,#0D1B2A,#1B3A4B);padding:11px 14px;display:flex;align-items:center;gap:11px;position:sticky;top:0;z-index:100}
+.hdr h1{color:#fff;font-size:15px;font-weight:700;line-height:1.2}
+.hdr-sub{color:#90CAF9;font-size:9px}
+.hdr-stats{margin-left:auto;display:flex;gap:12px}
+.hs{text-align:center}.hs-v{font-size:14px;font-weight:700}.hs-l{font-size:9px;color:#546E7A}
+.nav{background:#1B3A4B;display:flex;padding:4px 6px;gap:2px;overflow-x:auto;position:sticky;top:48px;z-index:99}
+.nav::-webkit-scrollbar{height:2px}.nav::-webkit-scrollbar-thumb{background:#455A64}
+.tb{padding:6px 11px;border:none;border-radius:7px;cursor:pointer;font-size:11px;white-space:nowrap;transition:all .2s;font-family:inherit}
+.tb.on{font-weight:700;color:#fff}.tb:not(.on){background:transparent;color:#90A4AE}
+.main{padding:11px;max-width:700px;margin:0 auto}
+.card{background:#fff;border-radius:11px;padding:14px;margin-bottom:11px;box-shadow:0 2px 7px rgba(0,0,0,.08)}
+.btn{padding:6px 12px;border:none;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;transition:opacity .2s}
+.btn:hover{opacity:.85}
+.fi{padding:6px 9px;border:1.5px solid #CFD8DC;border-radius:7px;font-size:12px;outline:none;font-family:inherit}
+.fi:focus{border-color:#1565C0}
+.badge{padding:3px 8px;border-radius:20px;font-size:10px;font-weight:600;display:inline-block}
+.rc{border-radius:11px;border:1.5px solid;margin-bottom:7px;overflow:hidden}
+.rc-hdr{display:flex;align-items:center;gap:7px;padding:9px 11px;flex-wrap:wrap}
+.mini{background:#fff;border-radius:6px;padding:4px 9px;text-align:center;min-width:56px}
+.mini-v{font-size:13px;font-weight:700}.mini-l{font-size:9px;color:#90A4AE}
+.empty{text-align:center;padding:40px 16px;color:#B0BEC5;background:#fff;border-radius:11px}
+.srch{padding:6px 9px;border:1.5px solid #CFD8DC;border-radius:7px;font-size:12px;outline:none;flex:1;min-width:140px;font-family:inherit}
+.srch:focus{border-color:#1565C0}
+.upload-zone{border:3px dashed #90CAF9;border-radius:12px;padding:36px 16px;text-align:center;cursor:pointer;transition:all .2s;background:#F8FBFF}
+.upload-zone:hover,.upload-zone.drag{border-color:#1565C0;background:#E3F2FD}
+/* Formula chip */
+.chip{display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:20px;font-size:11px;font-weight:600;margin:2px;cursor:pointer}
+.chip-plus{background:#E8F5E9;color:#2E7D32;border:1px solid #A5D6A7}
+.chip-minus{background:#FFEBEE;color:#C62828;border:1px solid #EF9A9A}
+/* Diff colors */
+.pos{color:#1B5E20;font-weight:700}.neg{color:#B71C1C;font-weight:700}.zero{color:#9E9E9E}
+/* Settings sub-tab */
+.stab{display:flex;gap:4px;margin-bottom:12px}
+.stb{padding:5px 12px;border:none;border-radius:7px;cursor:pointer;font-size:11px;font-weight:600;font-family:inherit}
+.stb.on{background:#455A64;color:#fff}.stb:not(.on){background:#ECEFF1;color:#546E7A}
+.mtbl{width:100%;border-collapse:collapse;font-size:11px}
+.mtbl th{padding:6px 7px;background:#37474F;color:#fff;text-align:left;font-weight:600}
+.mtbl td{padding:5px 7px;border-bottom:1px solid #F0F0F0;vertical-align:middle}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-thumb{background:#90A4AE;border-radius:3px}
+@media(max-width:480px){.hdr-stats{display:none}.tb{font-size:10px;padding:5px 8px}}
+</style>
+</head>
+<body><div id="app"></div>
+<script>
+// ═══ PRODUCTS ═══════════════════════════════════════
+const DP=['Chicken','Liver','Liver 500','Breast','Breast 500','Whole Legs','Whole Legs 500','Thigh','Thigh 500','Drum','Drum 500','Wings','Wings 500','BREAST WITH BONE','Chicken BLW Wings','Thigh BL-SL','Thigh BL-SO','Thigh SL','Whole legs BL-SL','Whole legs BL-SO','Whole legs SL','Thigh BL-SL 500','Thigh BL-SO 500','Thigh SL 500','Whole legs BL-SL 500','Whole legs BL-SO 500','Whole legs SL 500','Heart','Heart 500','Gizzard','Gizzard 500','Whole Chicken Frozen','Whole Legs 500 FF','Breast Frozen','Thigh 500 FF','Tail','Drum 500 FF','Minced','Wings 500 FF','Bone','Kashra','Neck','Skin','Mix Chicken','Shawrma'];
+
+// ═══ DEFAULT MAPPING ════════════════════════════════
+const DM=[
+  {n:'Fresh whole chicken KG',p:'Chicken',m:1},{n:'Fresh breast KG',p:'Breast',m:1},{n:'Fresh breast 500 G',p:'Breast 500',m:1},{n:'Fresh whole leg KG',p:'Whole Legs',m:1},{n:'Fresh whole leg 500 G',p:'Whole Legs 500',m:1},{n:'Fresh drumstick KG',p:'Drum',m:1},{n:'Fresh drumstick 500 G',p:'Drum 500',m:1},{n:'Fresh thigh KG',p:'Thigh',m:1},{n:'Fresh thigh 500 G',p:'Thigh 500',m:1},{n:'Fresh wings KG',p:'Wings',m:1},{n:'Fresh wings 500 G',p:'Wings 500',m:1},{n:'Fresh liver 500 G',p:'Liver 500',m:1},{n:'Fresh gizzard 500 G',p:'Gizzard 500',m:1},{n:'Fresh hearts 500 G',p:'Heart 500',m:1},{n:'Fresh liver KG',p:'Liver',m:1},{n:'Fresh liver 400 G',p:'Liver',m:0.4},{n:'whole chicken mix cut KG',p:'Mix Chicken',m:1},{n:'Fresh shawarma KG',p:'Shawrma',m:1},{n:'Fresh thigh skinless boneless KG',p:'Thigh BL-SL',m:1},{n:'Fresh thigh skinless boneless 500 G',p:'Thigh BL-SL 500',m:1},{n:'Fresh whole leg B/L S/L KG',p:'Whole legs BL-SL',m:1},{n:'Fresh whole leg B/L S/L 500 G',p:'Whole legs BL-SL 500',m:1},{n:'Fresh breast WBO KG',p:'Breast',m:1},{n:'Fresh heart KG',p:'Heart',m:1},{n:'Bone kg',p:'Bone',m:1},{n:'Fresh whole chicken ctn 1000g',p:'Chicken',m:10},{n:'Fresh whole chicken ctn 1100g',p:'Chicken',m:11},{n:'Skin kg',p:'Skin',m:1},{n:'Fresh gizzard KG',p:'Gizzard',m:1},{n:'Fresh whole chicken (pcs) 1000g',p:'Chicken',m:1},{n:'Fresh whole chicken (pcs) 1100g',p:'Chicken',m:1.1},{n:'Fresh breast skinless wings on kg',p:'Breast',m:1},{n:'Whole chicken mixcut 900 gm',p:'Mix Chicken',m:0.9},{n:'Breast sliced shawarma 500 G',p:'Breast 500',m:1},{n:'Fresh whole chicken (pcs) 700g',p:'Chicken',m:0.7},{n:'Fresh whole chicken (pcs) 800g',p:'Chicken',m:0.8},{n:'Fresh whole chicken (pcs) 900g',p:'Chicken',m:0.9},{n:'Fresh whole chicken (pcs) 1200g',p:'Chicken',m:1.2},{n:'Fresh whole chicken (pcs) 1300g',p:'Chicken',m:1.3},{n:'Fresh whole chicken (pcs) 1400g',p:'Chicken',m:1.4},{n:'Fresh breast with wings kg',p:'Breast',m:1},{n:'Fresh breast skinless with Bone kg',p:'Breast',m:1},{n:'fresh whole leg B/L S/On KG',p:'Whole legs BL-SO',m:1},{n:'Frozen whole leg kg',p:'Whole Legs',m:1},{n:'Fresh thigh boneless with skin 500 G',p:'Thigh BL-SO 500',m:1},{n:'Chicken boneless kg',p:'Shawrma',m:1},{n:'Fresh thigh boneless KG',p:'Thigh BL-SO',m:1},{n:'Fresh thigh boneless skin on KG',p:'Thigh BL-SO',m:1},{n:'Whole leg frozen defrosted KG',p:'Whole Legs',m:1},{n:'Frozen wings kg',p:'Wings',m:1},{n:'Frozen drumstick KG',p:'Drum',m:1},{n:'Neck KG',p:'Neck',m:1},{n:'Frozen drumstick 900 G',p:'Drum',m:0.9},{n:'Chicken trimmings KG',p:'Chicken',m:1},{n:'SHESH TAWOOK',p:'Breast',m:1},{n:'Fresh breast with bone kg',p:'Breast',m:1},{n:'Chicken Minced KG',p:'Minced',m:1},{n:'Chicken shish tawook kg',p:'Breast',m:1},{n:'Chicken shish tawook 500 g',p:'Breast 500',m:1},{n:'Chicken cuts with bone kg',p:'Mix Chicken',m:1},{n:'Bone 500 G',p:'Bone',m:0.5},{n:'Minced Breast 500 G',p:'Breast 500',m:1},{n:'FRESH CHICKEN BONELESS 500G',p:'Shawrma',m:0.5},{n:'FRESH CHICKEN STRIPS 500G',p:'Breast 500',m:1},{n:'CHICKEN BREAST CUBES 500G',p:'Breast 500',m:1},{n:'CHICKEN BREAST FILLET 500G',p:'Breast 500',m:1},{n:'CHICKEN BREAST-MINCED 500G',p:'Breast 500',m:1},{n:'CHICKEN BREAST FILLET KG',p:'Breast',m:1},{n:'Chicken tail KG',p:'Tail',m:1},{n:'Marinated whole chicken KG',p:'Chicken',m:1},{n:'Marinated whole leg KG',p:'Whole Legs',m:1},{n:'Fresh thigh skinless bone in KG',p:'Thigh SL',m:1},{n:'Frozen thigh kg',p:'Thigh',m:1},{n:'Frozen drumstick 500 G',p:'Drum 500',m:1},{n:'Frozen thigh 500 G',p:'Thigh 500',m:1},{n:'Chicken Minced 500 G',p:'Minced',m:0.5},{n:'Frozen breast KG',p:'Breast Frozen',m:1},{n:'Fresh wings tips KG',p:'Wings',m:1},{n:'Frozen whole chicken KG',p:'Whole Legs',m:1},{n:'Fresh breast (escalaop) KG',p:'Breast',m:1},{n:'Fresh whole leg S/L 500 G',p:'Whole legs SL 500',m:1},{n:'Fresh drumstick S/L KG',p:'Drum',m:1},{n:'Fresh whole chicken (pcs) 500g',p:'Chicken',m:0.5},{n:'Fresh whole chicken (pcs) 600g',p:'Chicken',m:0.6},{n:'Fresh whole chicken (pcs) 650g',p:'Chicken',m:0.65},{n:'Fresh whole chicken (pcs) 850g',p:'Chicken',m:0.85},{n:'Fresh whole chicken (pcs) 950g',p:'Chicken',m:0.95},
+];
+
+// ═══ DEFAULT STOCK MAPPING (from Accounting System) ══
+const DSM=[
+  {n:'CHI. BREAST BRZ. 6*2KG (SUPER FRANGO)',p:'Breast Frozen',m:12},
+  {n:'CHI. BREAST FRZN 12KG (SAFI)',p:'Breast Frozen',m:12},
+  {n:'CHICKEN GRILLER 10*1100GM',p:'Chicken',m:11},
+  {n:'CHICKEN THIGH FRZN 12KG B/L/SL (PREMIUM)',p:'Thigh BL-SL',m:12},
+  {n:'CHI. THIGH CHILLED BL/SL',p:'Thigh BL-SL',m:1},
+  {n:'F- CHICKEN MINCED',p:'Minced',m:1},
+  {n:'F- CHI. MIXED CUT',p:'Mix Chicken',m:1},
+  {n:'F- CHI. SHAWARMA',p:'Shawrma',m:1},
+  {n:'F-CHI. SKIN',p:'Skin',m:1},
+  {n:'FRESH CHI. BREAST',p:'Breast',m:1},
+  {n:'FRESH CHI. BREAST S/O B/O',p:'Breast',m:1},
+  {n:'FRESH CHICKEN BONE',p:'Bone',m:1},
+  {n:'FRESH CHICKEN GIZZARD KG',p:'Gizzard',m:1},
+  {n:'FRESH CHICKEN THIGH',p:'Thigh',m:1},
+  {n:'FRESH CHI. DRUMSTICK',p:'Drum',m:1},
+  {n:'FRESH CHI. DRUMSTICK (500G)',p:'Drum 500',m:1},
+  {n:'FRESH CHI. HEART KG',p:'Heart',m:1},
+  {n:'FRESH CHI. LIVER KG',p:'Liver',m:1},
+  {n:'FRESH CHI. THIGH (500G)',p:'Thigh 500',m:1},
+  {n:'FRESH CHI. THIGH BL/SL',p:'Thigh BL-SL',m:1},
+  {n:'FRESH CHI. WHOLE LEG',p:'Whole Legs',m:1},
+  {n:'FRESH CHI. WINGS',p:'Wings',m:1},
+  {n:'FRESH CHI. WINGS (500G)',p:'Wings 500',m:1},
+  {n:'FRESH WHOLE CHICKEN',p:'Chicken',m:1},
+  {n:'CHICKEN BREAST TENDERIZED BAL.',p:'Breast',m:1},
+  {n:'T- CHI. BREAST TENDERIZED',p:'Breast',m:1},
+  {n:'T-CHICKENCO TENDERIZED 400G',p:'Breast',m:0.4},
+];
+
+// ═══ TABS ════════════════════════════════════════════
+const TABS=[
+  {key:'inventory',    emoji:'📦',ar:'Inventory',    color:'#1565C0',light:'#E3F2FD',border:'#90CAF9'},
+  {key:'receivables',  emoji:'📥',ar:'Receivables',  color:'#2E7D32',light:'#E8F5E9',border:'#A5D6A7'},
+  {key:'returns',      emoji:'🔄',ar:'Returns',      color:'#C62828',light:'#FFEBEE',border:'#EF9A9A'},
+  {key:'sales',        emoji:'📤',ar:'Sales',        color:'#F57F17',light:'#FFFDE7',border:'#FFE082'},
+  {key:'stocksummary', emoji:'📊',ar:'Sys.Stock',    color:'#6A1B9A',light:'#F3E5F5',border:'#CE93D8'},
+  {key:'records',      emoji:'📋',ar:'Records',      color:'#0288D1',light:'#E1F5FE',border:'#81D4FA'},
+  {key:'formulaA',     emoji:'🧮',ar:'Formula A',    color:'#4527A0',light:'#EDE7F6',border:'#B39DDB'},
+  {key:'formulaB',     emoji:'🧮',ar:'Formula B',    color:'#00695C',light:'#E0F2F1',border:'#80CBC4'},
+  {key:'diff',         emoji:'⚖️',ar:'Difference',   color:'#BF360C',light:'#FBE9E7',border:'#FFAB91'},
+  {key:'settings',     emoji:'⚙️',ar:'Settings',     color:'#455A64',light:'#ECEFF1',border:'#B0BEC5'},
+];
+// Row 1 = data entry, Row 2 = analysis
+const TABS_R1=['inventory','receivables','returns','sales','stocksummary'];
+const TABS_R2=['records','formulaA','formulaB','diff','settings'];
+
+const TYPE_INFO={
+  inventory:    {emoji:'📦',color:'#1565C0',label:'Inventory'},
+  receivables:  {emoji:'📥',color:'#2E7D32',label:'Receivable'},
+  returns:      {emoji:'🔄',color:'#C62828',label:'Return'},
+  sales:        {emoji:'📤',color:'#F57F17',label:'Sales'},
+  stocksummary: {emoji:'📊',color:'#6A1B9A',label:'Sys.Stock'},
+};
+
+// ═══ STORAGE KEYS ═══════════════════════════════════
+const SK='chk-inv-v3',SK_P='chk-prods-v1',SK_M='chk-map-v1',SK_SM='chk-stk-v1',SK_FA='chk-fa-v1',SK_FB='chk-fb-v1';
+
+// ═══ DYNAMIC PRODUCTS ═══════════════════════════════
+let PRODUCTS=[],PARENT_PRODUCTS=[],C_MAP={};
+function getParent(n){for(const s of[' 500 FF',' 500']){if(n.endsWith(s)){const p=n.slice(0,-s.length).trim();if(PRODUCTS.includes(p))return p;}}return null;}
+function recompute(){C_MAP={};PRODUCTS.forEach(p=>{const r=getParent(p);if(r)C_MAP[p]=r;});PARENT_PRODUCTS=PRODUCTS.filter(p=>!C_MAP[p]);}
+function loadProducts(){try{const s=localStorage.getItem(SK_P);PRODUCTS=s?JSON.parse(s):[...DP];}catch(e){PRODUCTS=[...DP];}recompute();}
+function saveProducts(){localStorage.setItem(SK_P,JSON.stringify(PRODUCTS));recompute();}
+
+// ═══ DYNAMIC MAPPING (Sales) ════════════════════════
+let MD=[];
+function loadMapping(){try{const s=localStorage.getItem(SK_M);MD=s?JSON.parse(s):JSON.parse(JSON.stringify(DM));}catch(e){MD=JSON.parse(JSON.stringify(DM));}}
+function saveMapping(){localStorage.setItem(SK_M,JSON.stringify(MD));}
+function lookupMap(name){const k=name.toLowerCase().trim();return MD.find(m=>m.n.toLowerCase()===k)||null;}
+
+// ═══ STOCK MAPPING (Accounting System) ══════════════
+let SMD=[];
+function loadStockMapping(){try{const s=localStorage.getItem(SK_SM);SMD=s?JSON.parse(s):JSON.parse(JSON.stringify(DSM));}catch(e){SMD=JSON.parse(JSON.stringify(DSM));}}
+function saveStockMapping(){localStorage.setItem(SK_SM,JSON.stringify(SMD));}
+function lookupStockMap(name){const k=name.toUpperCase().trim();return SMD.find(m=>m.n.toUpperCase()===k)||null;}
+
+// ═══ STATE & DATA ════════════════════════════════════
+let S={tab:'inventory',view:'list',record:null,search:'',expanded:new Set(),
+       stab:'products',mapSearch:'',smSearch:'',mapEdit:null,smEdit:null,
+       recFilter:'all',faFilter:'all',fbFilter:'all',faFrom:'',faTo:'',fbFrom:'',fbTo:''};
+let D={inventories:[],receivables:[],returns:[],sales:[],stockSummaries:[]};
+let FA=[],FB=[];
+let UP ={step:'upload',fileName:'',date:'',rows:[],converted:{},unmatched:[]};
+let UPS={step:'upload',fileName:'',date:'',rows:[],converted:{},unmatched:[]};
+
+function load(){
+  try{const s=localStorage.getItem(SK);if(s){const d=JSON.parse(s);D={inventories:d.inventories||[],receivables:d.receivables||[],returns:d.returns||[],sales:d.sales||[],stockSummaries:d.stockSummaries||[]};}}
+  catch(e){}
+}
+function save(){try{localStorage.setItem(SK,JSON.stringify(D));}catch(e){alert('Storage error!');}}
+function loadFormulas(){try{const a=localStorage.getItem(SK_FA),b=localStorage.getItem(SK_FB);FA=a?JSON.parse(a):[];FB=b?JSON.parse(b):[];}catch(e){FA=[];FB=[];}}
+function saveFormulas(){localStorage.setItem(SK_FA,JSON.stringify(FA));localStorage.setItem(SK_FB,JSON.stringify(FB));}
+function gid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
+function emptyItems(){const o={};PRODUCTS.forEach(p=>o[p]={kg:'',pcs:''});return o;}
+function newRec(){return{id:gid(),date:new Date().toISOString().split('T')[0],notes:'',items:emptyItems()};}
+function dk(t){
+  if(t==='inventory')return'inventories';
+  if(t==='receivables')return'receivables';
+  if(t==='returns')return'returns';
+  if(t==='stocksummary')return'stockSummaries';
+  return'sales';
+}
+function ti(k){return TABS.find(t=>t.key===k);}
+function totalKg(r){return PRODUCTS.reduce((s,p)=>s+(parseFloat(r.items?.[p]?.kg)||0),0);}
+function filled(r){return PRODUCTS.filter(p=>getVal(r.items,p)>0).length;}
+function fmt(n,dec=2){return n!==0?(+n.toFixed(dec)).toString():'—';}
+function sf(recs,p,f){return recs.reduce((s,r)=>s+(parseFloat(r.items?.[p]?.[f])||0),0);}
+function getVal(items,p){return parseFloat(items?.[p]?.[C_MAP[p]?'pcs':'kg'])||0;}
+function getTotalKg(items,p){
+  const myKg=parseFloat(items[p]?.kg)||0;
+  if(C_MAP[p])return myKg+(parseFloat(items[p]?.pcs)||0)*0.5;
+  let t=myKg;PRODUCTS.forEach(c=>{if(C_MAP[c]===p)t+=(parseFloat(items[c]?.kg)||0)+((parseFloat(items[c]?.pcs)||0)*0.5);});
+  return t;
+}
+
+
+// ═══ FORMULA HELPERS ════════════════════════════════
+const REC_TYPE_MAP={inventories:'inventory',receivables:'receivables',returns:'returns',sales:'sales',stockSummaries:'stocksummary'};
+
+function findRecord(id){
+  for(const[key,type] of Object.entries(REC_TYPE_MAP)){
+    const r=(D[key]||[]).find(r=>r.id===id);
+    if(r)return{record:r,type};
+  }return null;
+}
+function getRecordLabel(id,short=false){
+  const f=findRecord(id);if(!f)return'(deleted)';
+  const{record:r,type:t}=f;
+  const inf=TYPE_INFO[t]||{emoji:'📄',color:'#546E7A'};
+  const label=short?`${inf.emoji} ${r.date}${r.notes?' '+r.notes:''}`:`${inf.emoji} ${r.date}${r.notes?' — '+r.notes:''}`;
+  return{label,color:inf.color,emoji:inf.emoji,type:t};
+}
+function calcFormula(ops){
+  const tot={};PRODUCTS.forEach(p=>tot[p]={kg:0,pcs:0});
+  ops.filter(op=>op.op!=='skip').forEach(op=>{
+    const f=findRecord(op.id);if(!f)return;
+    const sign=op.op==='+'?1:-1;
+    PRODUCTS.forEach(p=>{
+      tot[p].kg+=sign*(parseFloat(f.record.items?.[p]?.kg)||0);
+      tot[p].pcs+=sign*(parseFloat(f.record.items?.[p]?.pcs)||0);
+    });
+  });return tot;
+}
+function allRecords(){
+  const arr=[];
+  Object.entries(REC_TYPE_MAP).forEach(([key,type])=>{(D[key]||[]).forEach(r=>arr.push({...r,_type:type,_key:key}));});
+  return arr.sort((a,b)=>b.date.localeCompare(a.date));
+}
+function isInFormula(id,fa){return fa.some(op=>op.id===id);}
+function addToFormula(fid,id,op){
+  const fa=fid==='a'?FA:FB;
+  if(op==='remove'){if(fid==='a')FA=FA.filter(o=>o.id!==id);else FB=FB.filter(o=>o.id!==id);}
+  else{const i=fa.findIndex(o=>o.id===id);if(i>=0)fa[i].op=op;else fa.push({id,op});}
+  saveFormulas();render();
+}
+function removeFromFormula(fid,id){addToFormula(fid,id,'remove');}
+function cycleChip(fid,id,curOp){
+  // Cycle: + → - → skip → remove
+  const next={'+':'-','-':'skip','skip':'remove'}[curOp]||'remove';
+  addToFormula(fid,id,next);
+}
+
+// ═══ RENDER MAIN ════════════════════════════════════
+const TAB_SCROLL={};let _scrollTarget=null;
+
+function render(){
+  const sy=_scrollTarget!==null?_scrollTarget:(window.scrollY||0);
+  _scrollTarget=null;
+  const{tab,view}=S;
+  let h=renderHdr()+renderNav()+'<div class="main">';
+  const entryTabs=['inventory','receivables','returns'];
+  if(entryTabs.includes(tab)) h+=view==='list'?renderList():renderForm();
+  else if(tab==='sales')        h+=view==='form'?renderForm():renderSalesTab();
+  else if(tab==='stocksummary') h+=view==='form'?renderForm():renderStockTab();
+  else if(tab==='records')      h+=renderRecords();
+  else if(tab==='formulaA')     h+=renderFormula('a');
+  else if(tab==='formulaB')     h+=renderFormula('b');
+  else if(tab==='diff')         h+=renderDiff();
+  else if(tab==='settings')     h+=renderSettings();
+  h+='</div>';
+  document.getElementById('app').innerHTML=h;
+  requestAnimationFrame(()=>window.scrollTo(0,sy));
+}
+
+function renderHdr(){
+  return`<header class="hdr">
+    <div style="font-size:22px">🐔</div>
+    <div><h1>Chicken Inventory</h1><div class="hdr-sub">Stock Management System</div></div>
+    <div class="hdr-stats">
+      <div class="hs"><div class="hs-v" style="color:#90CAF9">${D.inventories.length}</div><div class="hs-l">Inv</div></div>
+      <div class="hs"><div class="hs-v" style="color:#A5D6A7">${D.receivables.length}</div><div class="hs-l">Rec</div></div>
+      <div class="hs"><div class="hs-v" style="color:#EF9A9A">${D.returns.length}</div><div class="hs-l">Ret</div></div>
+      <div class="hs"><div class="hs-v" style="color:#FFE082">${D.sales.length}</div><div class="hs-l">Sales</div></div>
+    </div>
+    <div style="display:flex;gap:5px;margin-left:8px">
+      <button onclick="saveToOneDrive()" title="Save to OneDrive" style="padding:5px 8px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">☁️</button>
+      <button onclick="exportData()" title="Export JSON to device" style="padding:5px 8px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">💾</button>
+      <label title="Restore from file" style="padding:5px 8px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">
+        📂<input type="file" accept=".json" onchange="importData(this)" style="display:none">
+      </label>
+    </div>
+  </header>`;
+}
+function renderNav(){
+  const row=(keys)=>keys.map(k=>{
+    const t=TABS.find(x=>x.key===k);const a=S.tab===k;
+    return`<button class="tb${a?' on':''}" style="${a?`background:${t.color}`:''}" onclick="switchTab('${k}')">${t.emoji} ${t.ar}</button>`;
+  }).join('');
+  return`<nav style="background:#1B3A4B;position:sticky;top:48px;z-index:99">
+    <div style="display:flex;padding:3px 6px 2px;gap:2px;overflow-x:auto;border-bottom:1px solid rgba(255,255,255,.1)">${row(TABS_R1)}</div>
+    <div style="display:flex;padding:2px 6px 4px;gap:2px;overflow-x:auto">${row(TABS_R2)}</div>
+  </nav>`;
+}
+
+// ─── List / Card / Form ───────────────────────────
+function renderList(){
+  const inf=ti(S.tab),key=dk(S.tab);
+  const recs=[...D[key]].sort((a,b)=>b.date.localeCompare(a.date));
+  let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:7px">
+    <div><h2 style="margin:0;font-size:16px;color:${inf.color}">${inf.emoji} ${inf.ar}</h2>
+    <p style="margin:2px 0 0;color:#78909C;font-size:11px">${recs.length} record(s) — tap to expand</p></div>
+    <button class="btn" style="background:${inf.color};color:#fff;padding:7px 16px" onclick="startNew()">+ New ${inf.ar}</button></div>`;
+  if(!recs.length){
+    h+=`<div class="empty" style="border:2px dashed ${inf.border}"><div style="font-size:36px;margin-bottom:7px">${inf.emoji}</div>
+      <div style="font-size:13px;font-weight:600">No records yet</div></div>`;
+  } else recs.forEach(r=>h+=renderCard(r,inf));
+  return h;
+}
+function renderCard(r,inf){
+  const kg=totalKg(r).toFixed(2),cnt=filled(r),exp=S.expanded.has(r.id);
+  return`<div class="rc" style="border-color:${inf.border}">
+    <div class="rc-hdr" style="background:${inf.light}">
+      <div style="flex:1;min-width:110px">
+        <div style="font-size:14px;font-weight:700">📅 ${r.date}</div>
+        ${r.notes?`<div style="font-size:11px;color:#607D8B;margin-top:1px">📝 ${r.notes}</div>`:''}
+      </div>
+      <div class="mini"><div class="mini-v" style="color:${inf.color}">${kg}</div><div class="mini-l">KG</div></div>
+      <div class="mini"><div class="mini-v" style="color:#546E7A">${cnt}</div><div class="mini-l">Prods</div></div>
+      <div style="display:flex;gap:4px">
+        <button class="btn" style="background:${inf.color};color:#fff;font-size:11px;padding:4px 9px" onclick="toggleCard('${r.id}')">${exp?'▲':'▼'}</button>
+        <button class="btn" style="background:#607D8B;color:#fff;padding:4px 7px" onclick="editRec('${r.id}')">✏️</button>
+        <button class="btn" style="background:#D32F2F;color:#fff;padding:4px 7px" onclick="delRec('${r.id}')">🗑️</button>
+      </div>
+    </div>
+    ${exp?`<div style="padding:11px">
+      ${renderPT(expandItems(r.items),true,'')}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px dashed #ECEFF1">
+        <span style="font-size:10px;color:#78909C;align-self:center">Export:</span>
+        <button class="btn" style="background:#1B5E20;color:#fff;padding:5px 12px;font-size:11px" onclick="exportRecordXLSX('${r.id}')">📊 Excel</button>
+        <button class="btn" style="background:#1565C0;color:#fff;padding:5px 12px;font-size:11px" onclick="exportImage('${r.id}')">🖼️ Image</button>
+        <button class="btn" style="background:#C62828;color:#fff;padding:5px 12px;font-size:11px" onclick="exportPDF('${r.id}')">📄 PDF</button>
+        <button class="btn" style="background:#25D366;color:#fff;padding:5px 12px;font-size:11px" onclick="shareWhatsApp('${r.id}')">💬 WhatsApp</button>
+      </div>
+    </div>`:''}
+  </div>`;
+}
+function renderForm(){
+  const inf=ti(S.tab),r=S.record;
+  return`
+  <div class="card" style="border:1.5px solid ${inf.border}">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:11px;flex-wrap:wrap;gap:6px">
+      <h2 style="margin:0;font-size:14px;color:${inf.color}">${inf.emoji} New ${inf.ar}</h2>
+      <div style="display:flex;gap:5px">
+        <button class="btn" style="background:#ECEFF1;color:#546E7A" onclick="cancelForm()">← Back</button>
+        <button class="btn" style="background:${inf.color};color:#fff;padding:7px 15px" onclick="saveRec()">💾 Save</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:flex-end">
+      <div><div style="font-size:10px;color:#90A4AE;margin-bottom:2px">📅 Date</div>
+        <input class="fi" type="date" value="${r.date}" onchange="S.record.date=this.value"></div>
+      <div style="flex:1;min-width:150px"><div style="font-size:10px;color:#90A4AE;margin-bottom:2px">📝 Notes</div>
+        <input class="fi" type="text" value="${r.notes||''}" placeholder="e.g. Morning count" oninput="S.record.notes=this.value" style="width:100%"></div>
+      <div style="display:flex;gap:5px">
+        <div style="background:#E3F2FD;padding:5px 9px;border-radius:7px;text-align:center">
+          <div id="stat-kg" style="font-size:14px;font-weight:700;color:#1565C0">${totalKg(r).toFixed(2)}</div>
+          <div style="font-size:9px;color:#78909C">KG</div></div>
+        <div style="background:#E0F2F1;padding:5px 9px;border-radius:7px;text-align:center">
+          <div id="stat-comb" style="font-size:14px;font-weight:700;color:#00695C">${PARENT_PRODUCTS.reduce((s,p)=>s+getTotalKg(r.items,p),0).toFixed(2)}</div>
+          <div style="font-size:9px;color:#78909C">Comb</div></div>
+        <div style="background:#E8F5E9;padding:5px 9px;border-radius:7px;text-align:center">
+          <div id="stat-cnt" style="font-size:14px;font-weight:700;color:#2E7D32">${filled(r)}</div>
+          <div style="font-size:9px;color:#78909C">Prods</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="card">${renderPT(r.items,false,S.search)}</div>`;
+}
+
+// ─── Product Table (compact 4-col) ───────────────
+function renderPT(items,readOnly,srch){
+  const s=srch.toLowerCase();
+  let vis=PRODUCTS.filter(p=>!s||p.toLowerCase().includes(s));
+  if(readOnly) vis=vis.filter(p=>getVal(items,p)>0);
+  const tKg=PRODUCTS.reduce((a,p)=>a+(parseFloat(items[p]?.kg)||0),0);
+  const tComb=PARENT_PRODUCTS.reduce((s,p)=>s+getTotalKg(items,p),0);
+  const fCnt=PRODUCTS.filter(p=>getVal(items,p)>0).length;
+
+  let h=`<div style="display:flex;gap:5px;margin-bottom:7px;flex-wrap:wrap;align-items:center">
+    ${!readOnly?`<input class="srch" id="srch-inp" type="text" placeholder="🔍 Search..." value="${srch}" oninput="updSearch(this.value)">`:''}
+    <span class="badge" style="background:#E3F2FD;color:#1565C0">⚖️ ${tKg.toFixed(2)}</span>
+    <span class="badge" style="background:#E0F2F1;color:#00695C">🔢 ${tComb.toFixed(2)}</span>
+    <span class="badge" style="background:#F3E5F5;color:#6A1B9A">📦 ${fCnt}</span>
+  </div>
+  <div style="border-radius:9px;border:1px solid #ECEFF1;overflow:hidden">
+  <table style="width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed">
+    <colgroup><col style="width:24px"><col><col style="width:78px"><col style="width:90px"></colgroup>
+    <thead><tr style="background:#263238;color:#fff">
+      <th style="padding:6px 4px;text-align:center;font-size:10px">#</th>
+      <th style="padding:6px 5px;text-align:left">Product</th>
+      <th style="padding:6px 4px;text-align:center">Qty<br><small style="opacity:.6;font-size:9px">kg/pcs</small></th>
+      <th style="padding:6px 4px;text-align:center;background:#00695C">Combined<br><small style="opacity:.7;font-size:9px">KG+½pcs</small></th>
+    </tr></thead><tbody>`;
+
+  vis.forEach((p,i)=>{
+    const is500=!!C_MAP[p];
+    const pidx=PRODUCTS.indexOf(p);
+    const field=is500?'pcs':'kg';
+    const raw=items[p]?.[field]||'';
+    const num=parseFloat(raw)||0;
+    const hv=num>0;
+    const uc=is500?'#7B1FA2':'#1565C0';
+    const ul=is500?'pcs':'kg';
+    const nameHtml=is500?`<div style="color:#7B1FA2;font-size:11px;word-break:break-word">${p}</div><div style="color:#B0BEC5;font-size:9px">↗ ${C_MAP[p]}</div>`:`<div style="font-weight:${hv?700:400};color:${hv?'#1B5E20':'#37474F'};font-size:11px;word-break:break-word">${p}</div>`;
+    let qtyHtml='';
+    if(readOnly){qtyHtml=hv?`<div style="text-align:center;font-weight:700;color:${uc}">${raw}<span style="font-size:9px;opacity:.7"> ${ul}</span></div>`:`<div style="text-align:center;color:#CFD8DC">—</div>`;}
+    else{qtyHtml=`<div style="display:flex;align-items:center;gap:2px"><input type="number" min="0" step="any" style="width:100%;padding:4px 3px;border:1.5px solid ${hv?(is500?'#CE93D8':'#81C784'):'#E0E0E0'};border-radius:5px;text-align:center;font-size:11px;outline:none;background:${hv?(is500?'#F8F0FF':'#F9FBE7'):'#fff'};font-family:inherit" value="${raw}" placeholder="0" oninput="updItem('${p.replace(/'/g,"\\'")}','${field}',this)"><span style="font-size:9px;color:${uc};font-weight:700;min-width:14px;flex-shrink:0">${ul}</span></div>`;}
+    let combHtml='<td style="background:#F5FAFA"></td>';
+    if(!is500){const ck=getTotalKg(items,p);const fp=ck-(parseFloat(items[p]?.kg)||0);combHtml=`<td id="tk-${pidx}" style="padding:4px 4px;text-align:center;background:${ck>0?'#E0F2F1':'#F5FAFA'}">${ck>0?`<div style="font-weight:700;color:#00695C;font-size:12px">${ck.toFixed(2)}</div>${fp>0?`<div style="font-size:9px;color:#2E7D32">+${fp.toFixed(2)}</div>`:''}`:`<span style="color:#CFD8DC">—</span>`}</td>`;}
+    h+=`<tr style="background:${is500?'#FDF8FF':(hv?'#F9FBE7':i%2===0?'#fff':'#FAFAFA')};border-bottom:1px solid #F0F0F0"><td style="padding:4px 3px;color:#BDBDBD;font-size:9px;text-align:center">${pidx+1}</td><td style="padding:4px 5px">${nameHtml}</td><td style="padding:3px 4px">${qtyHtml}</td>${combHtml}</tr>`;
+  });
+  if(!vis.length)h+=`<tr><td colspan="4" style="text-align:center;padding:20px;color:#90A4AE">No products</td></tr>`;
+  h+=`</tbody></table></div>`;return h;
+}
+
+// ─── Formula result table ─────────────────────────
+function renderFT(totals){
+  const vis=PRODUCTS.filter(p=>{
+    const v=totals[p];
+    return v&&(v.kg!==0||v.pcs!==0);
+  });
+  if(!vis.length)return`<div style="text-align:center;padding:24px;color:#90A4AE">No data in formula</div>`;
+  const tKg=PRODUCTS.reduce((s,p)=>s+(totals[p]?.kg||0),0);
+  const tComb=PARENT_PRODUCTS.reduce((s,p)=>s+getTotalKg(totals,p),0);
+  let h=`<div style="display:flex;gap:5px;margin-bottom:7px;flex-wrap:wrap">
+    <span class="badge" style="background:#E3F2FD;color:#1565C0">⚖️ ${tKg.toFixed(2)} KG</span>
+    <span class="badge" style="background:#E0F2F1;color:#00695C">🔢 ${tComb.toFixed(2)} KG</span>
+    <span class="badge" style="background:#F3E5F5;color:#6A1B9A">📦 ${vis.length} prods</span>
+  </div>
+  <div style="border-radius:9px;border:1px solid #ECEFF1;overflow:hidden">
+  <table style="width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed">
+    <colgroup><col style="width:24px"><col><col style="width:78px"><col style="width:90px"></colgroup>
+    <thead><tr style="background:#263238;color:#fff">
+      <th style="padding:6px 4px;text-align:center">#</th><th style="padding:6px 5px">Product</th>
+      <th style="padding:6px 4px;text-align:center">Qty</th>
+      <th style="padding:6px 4px;text-align:center;background:#00695C">Combined KG</th>
+    </tr></thead><tbody>`;
+  vis.forEach((p,i)=>{
+    const is500=!!C_MAP[p];const v=totals[p];
+    const pidx=PRODUCTS.indexOf(p);
+    const dispVal=is500?v.pcs:v.kg;
+    const ul=is500?'pcs':'kg';
+    const uc=is500?'#7B1FA2':'#1565C0';
+    const ck=getTotalKg(totals,p);
+    const fp=is500?0:(ck-(v.kg||0));
+    const nameHtml=is500?`<div style="color:#7B1FA2;font-size:11px;word-break:break-word">${p}</div><div style="color:#B0BEC5;font-size:9px">↗ ${C_MAP[p]}</div>`:`<div style="font-weight:700;color:#1B5E20;font-size:11px;word-break:break-word">${p}</div>`;
+    let combCell='<td style="background:#F5FAFA"></td>';
+    if(!is500){combCell=`<td style="padding:4px 4px;text-align:center;background:${ck>0?'#E0F2F1':ck<0?'#FFEBEE':'#F5FAFA'}">${ck!==0?`<div style="font-weight:700;color:${ck>0?'#00695C':'#C62828'};font-size:12px">${ck.toFixed(2)}</div>${fp!==0?`<div style="font-size:9px;color:${fp>0?'#2E7D32':'#C62828'}">${fp>0?'+':''}${fp.toFixed(2)}</div>`:''}`:`<span style="color:#CFD8DC">0</span>`}</td>`;}
+    h+=`<tr style="background:${is500?'#FDF8FF':i%2===0?'#fff':'#FAFAFA'};border-bottom:1px solid #F0F0F0"><td style="padding:4px 3px;color:#BDBDBD;font-size:9px;text-align:center">${pidx+1}</td><td style="padding:4px 5px">${nameHtml}</td><td style="padding:4px 4px;text-align:center;font-weight:700;color:${uc}">${dispVal!==0?`${dispVal.toFixed(dispVal%1===0?0:2)} <span style="font-size:9px;opacity:.7">${ul}</span>`:'—'}</td>${combCell}</tr>`;
+  });
+  h+=`<tr style="background:#263238;color:#fff;font-weight:700"><td colspan="2" style="padding:7px 7px">TOTAL</td><td style="text-align:center">${tKg.toFixed(2)}</td><td style="text-align:center;background:#00695C">${tComb.toFixed(2)}</td></tr>`;
+  h+=`</tbody></table></div>`;return h;
+}
+
+// ─── Records Overview ─────────────────────────────
+function renderRecords(){
+  const f=S.recFilter;
+  const all=allRecords();
+  const vis=f==='all'?all:all.filter(r=>r._key===f);
+  const counts={inventories:D.inventories.length,receivables:D.receivables.length,returns:D.returns.length,sales:D.sales.length};
+  const total=counts.inventories+counts.receivables+counts.returns+counts.sales+(D.stockSummaries||[]).length;
+
+  let h=`<div class="card">
+    <h2 style="margin:0 0 10px;font-size:16px;color:#0288D1">📋 All Records</h2>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px">
+      ${[['all','All',total,'#546E7A'],['inventories','📦',counts.inventories,'#1565C0'],['receivables','📥',counts.receivables,'#2E7D32'],['returns','🔄',counts.returns,'#C62828'],['sales','📤',counts.sales,'#F57F17'],['stockSummaries','📊',(D.stockSummaries||[]).length,'#6A1B9A']].map(([k,l,c,col])=>
+        `<button class="btn" style="background:${f===k?col:'#ECEFF1'};color:${f===k?'#fff':'#546E7A'};padding:4px 10px;font-size:11px" onclick="S.recFilter='${k}';render()">${l} (${c})</button>`
+      ).join('')}
+    </div></div>`;
+
+  if(!vis.length){return h+`<div class="empty"><div style="font-size:32px;margin-bottom:7px">📭</div><div style="font-size:13px">No records yet</div></div>`;}
+
+  vis.forEach(r=>{
+    const inf=ti(r._type)||ti('inventory');
+    const exp=S.expanded.has(r.id);
+    const kg=totalKg(r).toFixed(2),cnt=filled(r);
+    h+=`<div class="rc" style="border-color:${inf.border}">
+      <div class="rc-hdr" style="background:${inf.light}">
+        <div style="flex:1;min-width:110px">
+          <div style="font-size:13px;font-weight:700">${inf.emoji} ${r.date}</div>
+          ${r.notes?`<div style="font-size:11px;color:#607D8B;margin-top:1px">📝 ${r.notes}</div>`:''}
+        </div>
+        <div class="mini"><div class="mini-v" style="color:${inf.color}">${kg}</div><div class="mini-l">KG</div></div>
+        <div class="mini"><div class="mini-v" style="color:#546E7A">${cnt}</div><div class="mini-l">Prods</div></div>
+        <button class="btn" style="background:${inf.color};color:#fff;font-size:11px;padding:4px 9px" onclick="toggleCard('${r.id}')">${exp?'▲':'▼'}</button>
+      </div>
+      ${exp?`<div style="padding:11px">${renderPT(r.items,true,'')}</div>`:''}
+    </div>`;
+  });return h;
+}
+
+// ─── Formula Builder ──────────────────────────────
+function renderFormula(fid){
+  const fa=fid==='a'?FA:FB;
+  const fcolor=fid==='a'?'#4527A0':'#00695C';
+  const fname=fid==='a'?'Formula A':'Formula B';
+  const ff=fid==='a'?S.faFilter:S.fbFilter;
+  const totals=fa.length?calcFormula(fa):null;
+
+  // Remove orphaned records
+  const cleaned=fa.filter(op=>!!findRecord(op.id));
+  if(cleaned.length!==fa.length){if(fid==='a')FA=cleaned;else FB=cleaned;saveFormulas();}
+
+  let h=`<div class="card" style="border:1.5px solid ${fid==='a'?'#B39DDB':'#80CBC4'}">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <h2 style="margin:0;font-size:16px;color:${fcolor}">🧮 ${fname}</h2>
+      ${fa.length?`<button class="btn" style="background:#ECEFF1;color:#C62828;font-size:11px" onclick="${fid==='a'?'FA=[]':'FB=[]'};saveFormulas();render()">Clear All</button>`:''}
+    </div>
+    <!-- Current formula display -->
+    ${fa.length?`<div style="margin-bottom:10px">
+      <div style="font-size:10px;color:#78909C;margin-bottom:5px">Current Formula (tap chip to cycle: + → − → skip → remove):</div>
+      <div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center">
+        ${fa.map((op)=>{
+          const l=getRecordLabel(op.id,true);
+          const lbl=typeof l==='object'?l.label:l;
+          const chipStyle=op.op==='+'?'chip-plus':op.op==='-'?'chip-minus':'background:#F5F5F5;color:#9E9E9E;border:1px solid #E0E0E0;text-decoration:line-through;';
+          const prefix=op.op==='+'?'+ ':op.op==='-'?'− ':'○ ';
+          return`<span class="chip ${op.op==='+'||op.op==='-'?chipStyle:''}" style="${op.op==='skip'?chipStyle:''}" title="Click to cycle state" onclick="cycleChip('${fid}','${op.id}','${op.op}')">${prefix}${lbl}</span>`;
+        }).join('')}
+      </div>
+    </div>`:`<div style="color:#B0BEC5;font-size:12px;margin-bottom:10px">No records added yet. Add below ↓</div>`}
+    <!-- Date filter -->
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px;padding:8px;background:#F8F9FA;border-radius:8px">
+      <div style="font-size:10px;color:#546E7A;font-weight:600;width:100%">📅 Filter by Date Range:</div>
+      <div><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">From</div>
+        <input class="fi" type="date" value="${fid==='a'?S.faFrom:S.fbFrom}" style="font-size:11px;padding:4px 7px"
+          onchange="S.${fid==='a'?'faFrom':'fbFrom'}=this.value;render()"></div>
+      <div><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">To</div>
+        <input class="fi" type="date" value="${fid==='a'?S.faTo:S.fbTo}" style="font-size:11px;padding:4px 7px"
+          onchange="S.${fid==='a'?'faTo':'fbTo'}=this.value;render()"></div>
+      ${(fid==='a'?S.faFrom||S.faTo:S.fbFrom||S.fbTo)?`<button class="btn" style="background:#ECEFF1;color:#546E7A;font-size:10px;padding:4px 8px;align-self:flex-end" onclick="S.${fid==='a'?'faFrom=S.faTo':'fbFrom=S.fbTo'}='';render()">Clear</button>`:''}
+    </div>
+    <!-- Record picker -->
+    <div style="font-size:11px;color:#546E7A;margin-bottom:6px;font-weight:600">Add Records:</div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+      ${[['all','All'],['inventories','📦'],['receivables','📥'],['returns','🔄'],['sales','📤'],['stockSummaries','📊']].map(([k,l])=>
+        `<button class="btn" style="background:${ff===k?fcolor:'#ECEFF1'};color:${ff===k?'#fff':'#546E7A'};padding:3px 9px;font-size:11px" onclick="S.${fid==='a'?'faFilter':'fbFilter'}='${k}';render()">${l}</button>`
+      ).join('')}
+    </div>`;
+
+  // Show records to add (with date filter)
+  const all=allRecords();
+  const dateFrom=fid==='a'?S.faFrom:S.fbFrom;
+  const dateTo=fid==='a'?S.faTo:S.fbTo;
+  let filtered=ff==='all'?all:all.filter(r=>r._key===ff);
+  if(dateFrom) filtered=filtered.filter(r=>r.date>=dateFrom);
+  if(dateTo)   filtered=filtered.filter(r=>r.date<=dateTo);
+  if(!filtered.length){h+=`<div style="color:#B0BEC5;font-size:12px;padding:10px 0">No records found${dateFrom||dateTo?' in this date range':''}</div>`;}
+  filtered.forEach(r=>{
+    const inf=TYPE_INFO[r._type]||{emoji:'📄',color:'#546E7A'};
+    const curOp=fa.find(o=>o.id===r.id)?.op||'';
+    const bgMap={'+':inf.color+'0A','-':'#FFF5F5','skip':'#F5F5F5'};
+    const borderMap={'+':inf.color+'44','-':'#EF9A9A44','skip':'#E0E0E0'};
+    h+=`<div style="display:flex;align-items:center;gap:7px;padding:8px 10px;border-radius:8px;border:1px solid ${curOp?borderMap[curOp]:'#ECEFF1'};margin-bottom:5px;background:${curOp?bgMap[curOp]:'#fff'}">
+      <div style="flex:1;min-width:90px;${curOp==='skip'?'opacity:.5':''}">
+        <div style="font-size:12px;font-weight:700;color:${inf.color}">${inf.emoji} ${r.date}</div>
+        ${r.notes?`<div style="font-size:10px;color:#78909C">📝 ${r.notes}</div>`:''}
+        <div style="font-size:10px;color:#90A4AE">${totalKg(r).toFixed(2)} KG | ${filled(r)} prods</div>
+      </div>
+      <div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end">
+        <button class="btn" style="background:${curOp==='+'?'#2E7D32':'#E8F5E9'};color:${curOp==='+'?'#fff':'#2E7D32'};padding:4px 9px;font-size:12px;font-weight:700" onclick="addToFormula('${fid}','${r.id}','+')">+</button>
+        <button class="btn" style="background:${curOp==='-'?'#C62828':'#FFEBEE'};color:${curOp==='-'?'#fff':'#C62828'};padding:4px 9px;font-size:12px;font-weight:700" onclick="addToFormula('${fid}','${r.id}','-')">−</button>
+        <button class="btn" style="background:${curOp==='skip'?'#616161':'#F5F5F5'};color:${curOp==='skip'?'#fff':'#9E9E9E'};padding:4px 9px;font-size:12px;font-weight:700" title="Exclude from formula" onclick="addToFormula('${fid}','${r.id}','skip')">○</button>
+        ${curOp?`<button class="btn" style="background:#ECEFF1;color:#C62828;padding:4px 7px;font-size:11px" title="Remove from formula" onclick="addToFormula('${fid}','${r.id}','remove')">×</button>`:''}
+      </div>
+    </div>`;
+  });
+  h+=`</div>`;
+
+  // Result
+  if(fa.length&&totals){
+    h+=`<div class="card" style="border:1.5px solid ${fid==='a'?'#B39DDB':'#80CBC4'}">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:700;color:${fcolor}">📊 Result: ${fname}</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <span style="font-size:10px;color:#78909C;align-self:center">Export:</span>
+          <button class="btn" style="background:#1B5E20;color:#fff;padding:4px 10px;font-size:11px" onclick="exportFormulaXLSX('${fid}')">📊 Excel</button>
+          <button class="btn" style="background:#1565C0;color:#fff;padding:4px 10px;font-size:11px" onclick="exportFormulaImage('${fid}')">🖼️ Image</button>
+          <button class="btn" style="background:#C62828;color:#fff;padding:4px 10px;font-size:11px" onclick="exportFormulaPDF('${fid}')">📄 PDF</button>
+          <button class="btn" style="background:#25D366;color:#fff;padding:4px 10px;font-size:11px" onclick="shareFormulaWhatsApp('${fid}')">💬 WhatsApp</button>
+        </div>
+      </div>
+      ${renderFT(totals)}
+    </div>`;
+  }
+  return h;
+}
+
+// ─── Difference Page ──────────────────────────────
+function renderDiff(){
+  const totA=FA.length?calcFormula(FA):null;
+  const totB=FB.length?calcFormula(FB):null;
+
+  let h=`<div class="card" style="border:1.5px solid #FFAB91">
+    <h2 style="margin:0 0 6px;font-size:16px;color:#BF360C">⚖️ Difference: Formula B − Formula A</h2>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+      <span class="badge" style="background:#EDE7F6;color:#4527A0">🧮 Formula A: ${FA.length} records</span>
+      <span class="badge" style="background:#E0F2F1;color:#00695C">🧮 Formula B: ${FB.length} records</span>
+    </div>`;
+
+  if(!totA&&!totB){
+    h+=`<div style="color:#90A4AE;font-size:12px">Please add records to Formula A and Formula B first.</div></div>`;return h;
+  }
+  if(!totA){h+=`<div style="color:#C62828;font-size:12px">⚠️ Formula A is empty</div></div>`;return h;}
+  if(!totB){h+=`<div style="color:#C62828;font-size:12px">⚠️ Formula B is empty</div></div>`;return h;}
+  h+=`</div>`;
+
+  // Build diff
+  const diff={};PRODUCTS.forEach(p=>diff[p]={kg:(totB[p]?.kg||0)-(totA[p]?.kg||0),pcs:(totB[p]?.pcs||0)-(totA[p]?.pcs||0)});
+  const vis=PRODUCTS.filter(p=>diff[p].kg!==0||diff[p].pcs!==0);
+  const grandA=PARENT_PRODUCTS.reduce((s,p)=>s+getTotalKg(totA,p),0);
+  const grandB=PARENT_PRODUCTS.reduce((s,p)=>s+getTotalKg(totB,p),0);
+  const grandD=grandB-grandA;
+
+  h+=`<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700;color:#BF360C">⚖️ Difference: B − A</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">
+        <button class="btn" style="background:#1B5E20;color:#fff;padding:4px 10px;font-size:11px" onclick="exportFormulaXLSX('diff')">📊 Excel</button>
+        <button class="btn" style="background:#1565C0;color:#fff;padding:4px 10px;font-size:11px" onclick="exportFormulaImage('diff')">🖼️ Image</button>
+        <button class="btn" style="background:#C62828;color:#fff;padding:4px 10px;font-size:11px" onclick="exportFormulaPDF('diff')">📄 PDF</button>
+        <button class="btn" style="background:#25D366;color:#fff;padding:4px 10px;font-size:11px" onclick="shareFormulaWhatsApp('diff')">💬 WhatsApp</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:7px;margin-bottom:10px;flex-wrap:wrap">
+      <div style="background:#EDE7F6;padding:7px 12px;border-radius:8px;text-align:center">
+        <div style="font-size:15px;font-weight:700;color:#4527A0">${grandA.toFixed(2)}</div>
+        <div style="font-size:9px;color:#78909C">Formula A</div></div>
+      <div style="display:flex;align-items:center;font-size:18px;color:#546E7A">→</div>
+      <div style="background:#E0F2F1;padding:7px 12px;border-radius:8px;text-align:center">
+        <div style="font-size:15px;font-weight:700;color:#00695C">${grandB.toFixed(2)}</div>
+        <div style="font-size:9px;color:#78909C">Formula B</div></div>
+      <div style="display:flex;align-items:center;font-size:18px;color:#546E7A">=</div>
+      <div style="background:${grandD>0?'#E8F5E9':grandD<0?'#FFEBEE':'#ECEFF1'};padding:7px 12px;border-radius:8px;text-align:center">
+        <div style="font-size:15px;font-weight:700;color:${grandD>0?'#2E7D32':grandD<0?'#C62828':'#546E7A'}">${grandD>=0?'+':''}${grandD.toFixed(2)}</div>
+        <div style="font-size:9px;color:#78909C">Diff</div></div>
+    </div>
+    <div style="border-radius:9px;border:1px solid #ECEFF1;overflow:hidden">
+    <table style="width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed">
+      <colgroup><col style="width:24px"><col><col style="width:75px"><col style="width:75px"><col style="width:85px"></colgroup>
+      <thead><tr style="background:#263238;color:#fff">
+        <th style="padding:6px 4px;text-align:center">#</th>
+        <th style="padding:6px 5px">Product</th>
+        <th style="padding:6px 4px;text-align:center;background:#4527A0CC">A<br><small style="font-weight:400;font-size:9px">Comb KG</small></th>
+        <th style="padding:6px 4px;text-align:center;background:#00695CCC">B<br><small style="font-weight:400;font-size:9px">Comb KG</small></th>
+        <th style="padding:6px 4px;text-align:center;background:#BF360C">B−A<br><small style="font-weight:400;font-size:9px">Diff</small></th>
+      </tr></thead><tbody>`;
+
+  const allVis=PRODUCTS.filter(p=>!C_MAP[p]&&(getTotalKg(totA,p)!==0||getTotalKg(totB,p)!==0));
+  allVis.forEach((p,i)=>{
+    const ckA=getTotalKg(totA,p);
+    const ckB=getTotalKg(totB,p);
+    const d=ckB-ckA;
+    const dColor=d>0?'#1B5E20':d<0?'#B71C1C':'#9E9E9E';
+    h+=`<tr style="background:${i%2===0?'#fff':'#FAFAFA'};border-bottom:1px solid #F0F0F0">
+      <td style="padding:4px 3px;color:#BDBDBD;font-size:9px;text-align:center">${PRODUCTS.indexOf(p)+1}</td>
+      <td style="padding:4px 5px;font-weight:700;color:#1B5E20;font-size:11px;word-break:break-word">${p}</td>
+      <td style="padding:4px 4px;text-align:center;color:${ckA!==0?'#4527A0':'#CFD8DC'}">${ckA!==0?ckA.toFixed(2):'—'}</td>
+      <td style="padding:4px 4px;text-align:center;color:${ckB!==0?'#00695C':'#CFD8DC'}">${ckB!==0?ckB.toFixed(2):'—'}</td>
+      <td style="padding:4px 4px;text-align:center;font-weight:700;color:${dColor};background:${d>0?'#F1F8E9':d<0?'#FFF5F5':'#F5F5F5'}">${d!==0?(d>0?'+':'')+d.toFixed(2):'—'}</td>
+    </tr>`;
+  });
+  const dTotal=grandD;
+  h+=`<tr style="background:#263238;color:#fff;font-weight:700">
+    <td colspan="2" style="padding:7px 7px">TOTAL</td>
+    <td style="text-align:center;background:#4527A0CC">${grandA.toFixed(2)}</td>
+    <td style="text-align:center;background:#00695CCC">${grandB.toFixed(2)}</td>
+    <td style="text-align:center;background:#BF360C">${dTotal>=0?'+':''}${dTotal.toFixed(2)}</td>
+  </tr></tbody></table></div></div>`;
+  return h;
+}
+
+// ─── Settings ────────────────────────────────────
+function renderSettings(){
+  return`<div class="card">
+    <h2 style="margin:0 0 10px;font-size:16px;color:#455A64">⚙️ Settings</h2>
+    <div class="stab" style="flex-wrap:wrap">
+      <button class="stb${S.stab==='products'?' on':''}" onclick="S.stab='products';render()">📋 Products (${PRODUCTS.length})</button>
+      <button class="stb${S.stab==='mapping'?' on':''}" onclick="S.stab='mapping';render()">📤 Sales Map (${MD.length})</button>
+      <button class="stb${S.stab==='stockmap'?' on':''}" onclick="S.stab='stockmap';render()">📊 Stock Map (${SMD.length})</button>
+    </div>
+  </div>
+  ${S.stab==='products'?renderSettingsProds():S.stab==='mapping'?renderSettingsMap():renderSettingsStockMap()}`;
+}
+function renderSettingsProds(){
+  const ei=S.settingsEdit;
+  let h=`<div class="card">
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+      <button class="btn" style="background:#455A64;color:#fff;font-size:11px" onclick="resetProds()">🔄 Reset Default</button>
+      <span class="badge" style="background:#E0F2F1;color:#00695C">${Object.keys(C_MAP).length} 500-variants auto-detected</span>
+    </div>
+    <p style="font-size:11px;color:#78909C;margin-bottom:8px">Click product name to rename. ↑↓ to reorder.</p>`;
+  PRODUCTS.forEach((p,i)=>{
+    const is500=!!C_MAP[p],editing=ei===i;
+    h+=`<div style="display:flex;align-items:center;gap:5px;padding:6px 8px;border-radius:7px;border:1px solid #ECEFF1;margin-bottom:4px;background:${is500?'#FDF8FF':'#fff'}">
+      <span style="font-size:10px;color:#B0BEC5;min-width:20px;text-align:right">${i+1}</span>
+      ${is500?'<span style="color:#CE93D8;font-size:10px">↳</span>':''}
+      <div style="flex:1">${editing
+        ?`<input style="width:100%;padding:4px 7px;border:1.5px solid #1565C0;border-radius:5px;font-size:12px;outline:none;font-family:inherit" id="pe-inp" type="text" value="${p}" onkeydown="if(event.key==='Enter')savePE(${i},this.value);if(event.key==='Escape')cancelPE()" onblur="savePE(${i},this.value)" autofocus>`
+        :`<span style="font-size:${is500?10:11}px;color:${is500?'#9C27B0':'#263238'};cursor:pointer" onclick="S.settingsEdit=${i};render()">${p}</span>${is500?`<span style="font-size:9px;color:#B0BEC5"> → ${C_MAP[p]}</span>`:''}`
+      }</div>
+      <div style="display:flex;gap:2px">
+        <button class="btn" style="background:#ECEFF1;color:#546E7A;padding:2px 6px;font-size:10px" onclick="moveProd(${i},-1)" ${i===0?'disabled':''}>↑</button>
+        <button class="btn" style="background:#ECEFF1;color:#546E7A;padding:2px 6px;font-size:10px" onclick="moveProd(${i},1)" ${i===PRODUCTS.length-1?'disabled':''}>↓</button>
+        <button class="btn" style="background:#FFEBEE;color:#C62828;padding:2px 6px;font-size:10px" onclick="deleteProd(${i})">🗑️</button>
+      </div>
+    </div>`;
+  });
+  h+=`<div style="margin-top:10px;padding-top:10px;border-top:1px dashed #ECEFF1">
+    <div style="font-size:11px;color:#546E7A;margin-bottom:5px">Add New Product</div>
+    <div style="display:flex;gap:5px">
+      <input class="fi" id="new-prod" type="text" placeholder="Product name..." style="flex:1;font-size:11px" onkeydown="if(event.key==='Enter')addProd()">
+      <button class="btn" style="background:#1565C0;color:#fff;font-size:11px" onclick="addProd()">+ Add</button>
+    </div>
+  </div></div>`;return h;
+}
+function renderSettingsMap(){
+  const srch=(S.mapSearch||'').toLowerCase();
+  const maps=MD.filter(m=>!srch||m.n.toLowerCase().includes(srch)||m.p.toLowerCase().includes(srch));
+  const ei=S.mapEdit;
+  let h=`<div class="card">
+    <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
+      <input class="srch" type="text" placeholder="🔍 Search..." value="${S.mapSearch||''}" oninput="S.mapSearch=this.value;render()" style="flex:1;font-size:11px">
+      <button class="btn" style="background:#455A64;color:#fff;font-size:11px" onclick="resetMapping()">🔄 Reset</button>
+    </div>
+    <p style="font-size:11px;color:#78909C;margin-bottom:8px">${MD.length} mappings total | ${maps.length} shown</p>
+    <div style="border-radius:8px;border:1px solid #ECEFF1;overflow:hidden;margin-bottom:12px">
+    <table class="mtbl"><thead><tr>
+      <th>#</th><th>Sales Name</th><th>→ Product</th><th style="width:45px">×</th><th style="width:60px">Actions</th>
+    </tr></thead><tbody>`;
+  maps.forEach((m)=>{
+    const ri=MD.indexOf(m),editing=ei===ri;
+    if(editing){
+      h+=`<tr style="background:#E3F2FD"><td style="color:#B0BEC5;font-size:10px">${ri+1}</td>
+        <td><input class="fi" id="me-n" type="text" value="${m.n}" style="width:100%;padding:3px 6px;font-size:10px"></td>
+        <td><select class="fi" id="me-p" style="width:100%;padding:3px 6px;font-size:10px">${PRODUCTS.map(p=>`<option value="${p}"${p===m.p?' selected':''}>${p}</option>`).join('')}</select></td>
+        <td><input class="fi" id="me-m" type="number" step="0.01" value="${m.m}" style="width:100%;padding:3px 5px;font-size:10px"></td>
+        <td><button class="btn" style="background:#2E7D32;color:#fff;padding:2px 6px;font-size:10px" onclick="saveMapEdit(${ri})">✓</button>
+            <button class="btn" style="background:#ECEFF1;color:#546E7A;padding:2px 6px;font-size:10px" onclick="S.mapEdit=null;render()">✗</button></td>
+      </tr>`;
+    } else {
+      h+=`<tr><td style="color:#B0BEC5;font-size:10px">${ri+1}</td>
+        <td style="font-size:10px;color:#37474F;word-break:break-word">${m.n}</td>
+        <td style="font-size:10px;font-weight:600;color:#1565C0">${m.p}</td>
+        <td style="text-align:center;font-size:10px">${m.m}</td>
+        <td><button class="btn" style="background:#E3F2FD;color:#1565C0;padding:2px 5px;font-size:10px" onclick="S.mapEdit=${ri};render()">✏️</button>
+            <button class="btn" style="background:#FFEBEE;color:#C62828;padding:2px 5px;font-size:10px" onclick="deleteMap(${ri})">🗑️</button></td>
+      </tr>`;
+    }
+  });
+  if(!maps.length)h+=`<tr><td colspan="5" style="text-align:center;padding:16px;color:#90A4AE">No mappings found</td></tr>`;
+  h+=`</tbody></table></div>
+  <div style="font-size:11px;color:#546E7A;margin-bottom:6px;font-weight:600">+ Add New</div>
+  <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:flex-end">
+    <div style="flex:2;min-width:130px"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Sales Name</div>
+      <input class="fi" id="mn-n" type="text" placeholder="Sales product name" style="width:100%;font-size:11px"></div>
+    <div style="flex:1;min-width:100px"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">→ Product</div>
+      <select class="fi" id="mn-p" style="width:100%;font-size:11px">${PRODUCTS.map(p=>`<option value="${p}">${p}</option>`).join('')}</select></div>
+    <div style="width:65px"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">× Factor</div>
+      <input class="fi" id="mn-m" type="number" step="0.01" value="1" style="width:100%;font-size:11px"></div>
+    <button class="btn" style="background:#1565C0;color:#fff;font-size:11px;align-self:flex-end" onclick="addMap()">+ Add</button>
+  </div></div>`;return h;
+}
+
+// ─── Stock Summary Tab ────────────────────────────
+function renderStockTab(){return UPS.step==='upload'?renderStockUpload():renderStockResult();}
+
+function renderStockUpload(){
+  const inf=ti('stocksummary');
+  const recs=[...( D.stockSummaries||[])].sort((a,b)=>b.date.localeCompare(a.date));
+  let h=`<div class="card" style="border:1.5px solid ${inf.border}">
+    <h2 style="margin:0 0 5px;font-size:16px;color:${inf.color}">📊 System Stock Summary</h2>
+    <p style="color:#78909C;font-size:11px;margin-bottom:14px">Import closing balance Excel from your accounting system. Uses the Stock Mapping table.</p>
+    <div class="upload-zone" id="uz2" onclick="document.getElementById('fi2').click()"
+      ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleStockDrop(event)">
+      <input type="file" id="fi2" accept=".xlsx,.xls,.csv" onchange="handleStockFile(this)" style="display:none">
+      <div style="font-size:36px;margin-bottom:8px">📊</div>
+      <div style="font-size:14px;font-weight:700;color:#6A1B9A;margin-bottom:3px">Click or drag & drop</div>
+      <div style="font-size:11px;color:#78909C">Col A = Item Name | Col B = Closing Balance</div>
+    </div>
+    <div style="margin-top:12px;text-align:center">
+      <button class="btn" style="background:#ECEFF1;color:#546E7A;font-size:11px" onclick="S.tab='stocksummary';S.view='form';const r=newRec();r.notes='Sys.Stock';S.record=r;render()">✍️ Enter Manually</button>
+    </div>
+  </div>`;
+  if(recs.length){h+=`<h3 style="margin:0 0 7px;font-size:13px;color:${inf.color}">Saved Records (${recs.length})</h3>`;recs.forEach(r=>h+=renderCard(r,inf));}
+  return h;
+}
+
+function renderStockResult(){
+  const inf=ti('stocksummary');
+  const{fileName,date,rows,converted,unmatched}=UPS;
+  const mRows=rows.filter(r=>r.matched&&r.qty>0);
+  const uRows=rows.filter(r=>!r.matched);
+  const dispItems=emptyItems();
+  PRODUCTS.forEach(p=>{if((converted[p]||0)>0){if(C_MAP[p])dispItems[p]={kg:'',pcs:converted[p].toFixed(0)};else dispItems[p]={kg:converted[p].toFixed(3),pcs:''};}}); 
+  const tc=PARENT_PRODUCTS.reduce((s,p)=>s+getTotalKg(dispItems,p),0);
+  let h=`<div class="card" style="border:1.5px solid ${inf.border}">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+      <div><h2 style="margin:0;font-size:14px;color:${inf.color}">📊 Stock Import Result</h2>
+        <div style="font-size:10px;color:#78909C">📄 ${fileName}</div></div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">
+        <button class="btn" style="background:#ECEFF1;color:#546E7A;font-size:11px" onclick="UPS.step='upload';render()">← New</button>
+        <button class="btn" style="background:${inf.color};color:#fff;font-size:11px;padding:7px 14px" onclick="saveStockRec()">💾 Save</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end">
+      <div><div style="font-size:10px;color:#90A4AE;margin-bottom:2px">📅 Date</div>
+        <input class="fi" type="date" value="${date}" onchange="UPS.date=this.value" style="font-size:11px"></div>
+      <div style="flex:1;min-width:130px"><div style="font-size:10px;color:#90A4AE;margin-bottom:2px">📝 Notes</div>
+        <input class="fi" type="text" placeholder="e.g. May 19-20 closing" oninput="UPS.notes=this.value" style="width:100%;font-size:11px"></div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+        <span class="badge" style="background:#E8F5E9;color:#2E7D32">✅ ${mRows.length}</span>
+        ${uRows.length?`<span class="badge" style="background:#FFEBEE;color:#C62828">⚠️ ${uRows.length}</span>`:''}
+        <span class="badge" style="background:#E0F2F1;color:#00695C">🔢 ${tc.toFixed(2)} KG</span>
+      </div>
+    </div></div>
+  <div class="card"><div style="font-size:12px;font-weight:700;color:${inf.color};margin-bottom:8px">📦 Converted Products</div>${renderPT(dispItems,true,'')}</div>
+  <div class="card"><div style="font-size:12px;font-weight:700;margin-bottom:8px">📋 All Rows</div>
+  <div style="border-radius:8px;border:1px solid #ECEFF1;overflow:hidden">
+  <table style="width:100%;border-collapse:collapse;font-size:10px;table-layout:fixed">
+    <colgroup><col style="width:22px"><col><col style="width:55px"><col style="width:30px"><col><col style="width:35px"><col style="width:65px"></colgroup>
+    <thead><tr style="background:#263238;color:#fff">
+      <th style="padding:5px 3px">#</th><th style="padding:5px 4px;text-align:left">Accounting Name</th>
+      <th style="padding:5px 3px;text-align:center">Qty</th><th style="padding:5px 3px;text-align:center">✓</th>
+      <th style="padding:5px 4px;text-align:left">→ Product</th><th style="padding:5px 3px;text-align:center">×</th>
+      <th style="padding:5px 3px;text-align:center;background:#E65100">= KG</th>
+    </tr></thead><tbody>`;
+  rows.forEach((r,i)=>{
+    const bad=!r.matched;
+    h+=`<tr style="background:${bad?'#FFF5F5':i%2===0?'#fff':'#FAFAFA'};border-bottom:1px solid #F0F0F0">
+      <td style="padding:4px 3px;color:#BDBDBD;text-align:center">${i+1}</td>
+      <td style="padding:4px 4px;word-break:break-word;color:${bad?'#C62828':'#37474F'}">${r.name}</td>
+      <td style="padding:4px 3px;text-align:center;font-weight:700">${r.qty||'—'}</td>
+      <td style="padding:4px 3px;text-align:center">${r.matched?'✅':'❌'}</td>
+      <td style="padding:4px 4px;color:#6A1B9A;word-break:break-word">${r.product||'—'}</td>
+      <td style="padding:4px 3px;text-align:center;color:#546E7A">${r.multiplier||'—'}</td>
+      <td style="padding:4px 3px;text-align:center;font-weight:700;color:#E65100">${r.converted>0?r.converted.toFixed(2):'—'}</td>
+    </tr>`;
+  });
+  h+=`</tbody></table></div></div>`;
+  if(uRows.length)h+=`<div class="card" style="border:1.5px solid #EF9A9A;background:#FFF5F5"><div style="font-size:12px;font-weight:700;color:#C62828;margin-bottom:6px">⚠️ Unmatched (${uRows.length})</div><div style="display:flex;flex-wrap:wrap;gap:4px">${uRows.map(r=>`<span class="badge" style="background:#FFEBEE;color:#C62828;border:1px solid #EF9A9A">${r.name} (${r.qty})</span>`).join('')}</div></div>`;
+  return h;
+}
+
+function handleStockFile(inp){const f=inp.files[0];if(!f)return;const reader=new FileReader();reader.onload=e=>processStockExcel(e.target.result,f.name);reader.readAsArrayBuffer(f);}
+function handleStockDrop(e){e.preventDefault();document.getElementById('uz2')?.classList.remove('drag');const f=e.dataTransfer.files[0];if(!f)return;const reader=new FileReader();reader.onload=ev=>processStockExcel(ev.target.result,f.name);reader.readAsArrayBuffer(f);}
+
+function processStockExcel(buf,name){
+  try{
+    const wb=XLSX.read(buf,{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    const result=[],converted={};PRODUCTS.forEach(p=>converted[p]=0);
+    for(let i=0;i<rows.length;i++){
+      const row=rows[i];
+      const rname=String(row[0]||'').trim();
+      // Parse numeric value from column B (strip units like KG, CTN, PCS)
+      const rawB=String(row[1]||'').trim();
+      const qty=parseFloat(rawB.replace(/[^0-9.\-]/g,''))||0;
+      if(!rname||!qty)continue;
+      if(rname.toLowerCase().includes('item')||rname.toLowerCase().includes('balance')||rname.toLowerCase().includes('quantity'))continue;
+      const map=lookupStockMap(rname);
+      const entry={name:rname,qty,matched:!!map,product:map?map.p:'',multiplier:map?map.m:0,converted:map?(qty*map.m):0};
+      result.push(entry);
+      if(map&&qty)converted[map.p]=(converted[map.p]||0)+(qty*map.m);
+    }
+    const today=new Date().toISOString().split('T')[0];
+    UPS={step:'result',fileName:name,date:today,notes:'Sys.Stock',rows:result,converted,unmatched:result.filter(r=>!r.matched)};
+  }catch(e){alert('Error: '+e.message);UPS.step='upload';}
+  render();
+}
+
+function saveStockRec(){
+  const items=emptyItems();
+  PRODUCTS.forEach(p=>{if((UPS.converted[p]||0)>0){if(C_MAP[p])items[p]={kg:'',pcs:UPS.converted[p].toFixed(0)};else items[p]={kg:UPS.converted[p].toFixed(3),pcs:''};}}); 
+  if(!D.stockSummaries)D.stockSummaries=[];
+  D.stockSummaries=[{id:gid(),date:UPS.date,notes:UPS.notes||UPS.fileName,items:compactItems(items)},...D.stockSummaries];
+  save();UPS.step='upload';UPS.rows=[];render();
+}
+
+// ─── Sales Tab ────────────────────────────────────
+function renderSalesTab(){return UP.step==='upload'?renderUpload():renderSalesResult();}
+function renderUpload(){
+  const inf=ti('sales');const recs=[...D.sales].sort((a,b)=>b.date.localeCompare(a.date));
+  let h=`<div class="card" style="border:1.5px solid ${inf.border}">
+    <h2 style="margin:0 0 5px;font-size:16px;color:${inf.color}">📤 Sales</h2>
+    <p style="color:#78909C;font-size:11px;margin-bottom:14px">Upload your sales Excel file to auto-convert.</p>
+    <div class="upload-zone" id="uz" onclick="document.getElementById('fi').click()"
+      ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event)">
+      <input type="file" id="fi" accept=".xlsx,.xls,.csv" onchange="handleFile(this)" style="display:none">
+      <div style="font-size:36px;margin-bottom:8px">📊</div>
+      <div style="font-size:14px;font-weight:700;color:#1565C0;margin-bottom:3px">Click or drag & drop</div>
+      <div style="font-size:11px;color:#78909C">Col B = Name | Col C = Qty</div>
+    </div></div>`;
+  if(recs.length){h+=`<h3 style="margin:0 0 7px;font-size:13px;color:${inf.color}">Saved Sales (${recs.length})</h3>`;recs.forEach(r=>h+=renderCard(r,inf));}
+  return h;
+}
+function renderSalesResult(){
+  const inf=ti('sales');const{fileName,date,rows,converted,unmatched}=UP;
+  const mRows=rows.filter(r=>r.matched&&r.qty>0);
+  const uRows=rows.filter(r=>!r.matched&&r.qty>0);
+  const dispItems=emptyItems();
+  PRODUCTS.forEach(p=>{if((converted[p]||0)>0){if(C_MAP[p])dispItems[p]={kg:'',pcs:converted[p].toFixed(0)};else dispItems[p]={kg:converted[p].toFixed(3),pcs:''};}}); 
+  const tc=PARENT_PRODUCTS.reduce((s,p)=>s+getTotalKg(dispItems,p),0);
+  let h=`<div class="card" style="border:1.5px solid ${inf.border}">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+      <div><h2 style="margin:0;font-size:14px;color:${inf.color}">📊 Conversion Result</h2>
+        <div style="font-size:10px;color:#78909C">📄 ${fileName}</div></div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">
+        <button class="btn" style="background:#ECEFF1;color:#546E7A;font-size:11px" onclick="UP.step='upload';render()">← New</button>
+        <button class="btn" style="background:${inf.color};color:#fff;font-size:11px;padding:7px 14px" onclick="saveSalesRec()">💾 Save</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end">
+      <div><div style="font-size:10px;color:#90A4AE;margin-bottom:2px">📅 Date</div>
+        <input class="fi" type="date" value="${date}" onchange="UP.date=this.value" style="font-size:11px"></div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+        <span class="badge" style="background:#E8F5E9;color:#2E7D32">✅ ${mRows.length}</span>
+        ${uRows.length?`<span class="badge" style="background:#FFEBEE;color:#C62828">⚠️ ${uRows.length}</span>`:''}
+        <span class="badge" style="background:#E0F2F1;color:#00695C">🔢 ${tc.toFixed(2)} KG</span>
+      </div>
+    </div></div>
+  <div class="card"><div style="font-size:12px;font-weight:700;color:#E65100;margin-bottom:8px">📦 Converted Products</div>
+    ${renderPT(dispItems,true,'')}
+  </div>
+  <div class="card"><div style="font-size:12px;font-weight:700;color:#263238;margin-bottom:8px">📋 All Rows</div>
+  <div style="border-radius:8px;border:1px solid #ECEFF1;overflow:hidden">
+  <table style="width:100%;border-collapse:collapse;font-size:10px;table-layout:fixed">
+    <colgroup><col style="width:22px"><col><col style="width:50px"><col style="width:28px"><col><col style="width:35px"><col style="width:60px"></colgroup>
+    <thead><tr style="background:#263238;color:#fff">
+      <th style="padding:5px 3px">#</th><th style="padding:5px 4px;text-align:left">Sales Name</th>
+      <th style="padding:5px 3px;text-align:center">Qty</th><th style="padding:5px 3px;text-align:center">✓</th>
+      <th style="padding:5px 4px;text-align:left">→ Product</th><th style="padding:5px 3px;text-align:center">×</th>
+      <th style="padding:5px 3px;text-align:center;background:#E65100">= KG</th>
+    </tr></thead><tbody>`;
+  rows.forEach((r,i)=>{
+    const bad=!r.matched&&r.qty>0;
+    h+=`<tr style="background:${bad?'#FFF5F5':i%2===0?'#fff':'#FAFAFA'};border-bottom:1px solid #F0F0F0">
+      <td style="padding:4px 3px;color:#BDBDBD;text-align:center">${i+1}</td>
+      <td style="padding:4px 4px;word-break:break-word;color:${bad?'#C62828':'#37474F'}">${r.name}</td>
+      <td style="padding:4px 3px;text-align:center;font-weight:${r.qty>0?700:400}">${r.qty||'—'}</td>
+      <td style="padding:4px 3px;text-align:center">${r.qty>0?(r.matched?'✅':'❌'):'—'}</td>
+      <td style="padding:4px 4px;color:#1565C0;word-break:break-word">${r.product||'—'}</td>
+      <td style="padding:4px 3px;text-align:center;color:#546E7A">${r.multiplier||'—'}</td>
+      <td style="padding:4px 3px;text-align:center;font-weight:700;color:#E65100">${r.converted>0?r.converted.toFixed(2):'—'}</td>
+    </tr>`;
+  });
+  h+=`</tbody></table></div></div>`;
+  if(uRows.length)h+=`<div class="card" style="border:1.5px solid #EF9A9A;background:#FFF5F5"><div style="font-size:12px;font-weight:700;color:#C62828;margin-bottom:6px">⚠️ Unmatched (${uRows.length})</div><div style="display:flex;flex-wrap:wrap;gap:4px">${uRows.map(r=>`<span class="badge" style="background:#FFEBEE;color:#C62828;border:1px solid #EF9A9A">${r.name} (${r.qty})</span>`).join('')}</div></div>`;
+  return h;
+}
+
+// ═══ ACTIONS ════════════════════════════════════════
+function switchTab(t){
+  TAB_SCROLL[S.tab]=window.scrollY; // save current tab scroll
+  _scrollTarget=TAB_SCROLL[t]||0;   // restore target tab scroll
+  S.tab=t;S.view='list';S.search='';
+  render();
+}
+function formatDateShort(d){const[y,m,day]=d.split('-');return`${day}/${m}/${y}`;}
+
+function startNew(){
+  const r=newRec();
+  const inf=ti(S.tab);
+  r.notes=inf.ar; // just the type label, user sets date separately
+  S.record=r;S.view='form';render();
+}
+function cancelForm(){S.view='list';S.record=null;S.search='';render();}
+function editRec(id){const r=D[dk(S.tab)].find(r=>r.id===id);if(r){S.record={...JSON.parse(JSON.stringify(r)),items:expandItems(r.items)};S.view='form';render();}}
+function delRec(id){if(!confirm('Delete?'))return;D[dk(S.tab)]=D[dk(S.tab)].filter(r=>r.id!==id);save();render();}
+function toggleCard(id){S.expanded.has(id)?S.expanded.delete(id):S.expanded.add(id);render();}
+function saveRec(){
+  const r=S.record;if(!r.date){alert('Please select a date!');return;}
+  r.items=compactItems(r.items); // save only non-empty items
+  const key=dk(S.tab);const i=D[key].findIndex(x=>x.id===r.id);
+  if(i>=0)D[key][i]=r;else D[key]=[r,...D[key]];
+  save();S.view='list';S.record=null;S.search='';render();
+}
+function updItem(p,f,el){
+  if(!S.record)return;const v=el.value;
+  if(!S.record.items[p])S.record.items[p]={kg:'',pcs:''};
+  S.record.items[p][f]=v;
+  el.style.borderColor=(parseFloat(v)||0)>0?(f==='pcs'?'#CE93D8':'#81C784'):'#E0E0E0';
+  el.style.background=(parseFloat(v)||0)>0?(f==='pcs'?'#F8F0FF':'#F9FBE7'):'#fff';
+  const sk=document.getElementById('stat-kg'),sc=document.getElementById('stat-cnt'),scomb=document.getElementById('stat-comb');
+  if(sk)sk.textContent=totalKg(S.record).toFixed(2);
+  if(scomb)scomb.textContent=PARENT_PRODUCTS.reduce((s,p)=>s+getTotalKg(S.record.items,p),0).toFixed(2);
+  if(sc)sc.textContent=filled(S.record);
+  PRODUCTS.forEach((prod,idx)=>{
+    if(C_MAP[prod])return;const cell=document.getElementById(`tk-${idx}`);if(!cell)return;
+    const ck=getTotalKg(S.record.items,prod);const fp=ck-(parseFloat(S.record.items[prod]?.kg)||0);
+    cell.innerHTML=ck>0?`<div style="font-weight:700;color:#00695C;font-size:12px">${ck.toFixed(2)}</div>${fp>0?`<div style="font-size:9px;color:#2E7D32">+${fp.toFixed(2)}</div>`:''}`:`<span style="color:#CFD8DC">—</span>`;
+    cell.style.background=ck>0?'#E0F2F1':'#F5FAFA';
+  });
+}
+function updSearch(v){
+  S.search=v;const tc=document.querySelector('.main .card:last-child');
+  if(tc&&S.record)tc.innerHTML=renderPT(S.record.items,false,v);
+  const inp=document.getElementById('srch-inp');if(inp){inp.focus();inp.setSelectionRange(v.length,v.length);}
+}
+// Products settings
+function savePE(i,nv){nv=nv.trim();S.settingsEdit=null;if(!nv||nv===PRODUCTS[i]){render();return;}
+  if(PRODUCTS.includes(nv)){alert(`"${nv}" exists!`);render();return;}
+  const old=PRODUCTS[i];PRODUCTS[i]=nv;
+  ['inventories','receivables','returns','sales'].forEach(k=>D[k].forEach(r=>{if(r.items[old]!==undefined){r.items[nv]=r.items[old];delete r.items[old];}}));
+  saveProducts();save();render();}
+function cancelPE(){S.settingsEdit=null;render();}
+function moveProd(i,d){const ni=i+d;if(ni<0||ni>=PRODUCTS.length)return;[PRODUCTS[i],PRODUCTS[ni]]=[PRODUCTS[ni],PRODUCTS[i]];saveProducts();render();}
+function deleteProd(i){if(!confirm(`Delete "${PRODUCTS[i]}"?`))return;const nm=PRODUCTS[i];PRODUCTS.splice(i,1);['inventories','receivables','returns','sales'].forEach(k=>D[k].forEach(r=>delete r.items[nm]));saveProducts();save();render();}
+function addProd(){
+  const inp=document.getElementById('new-prod');if(!inp)return;
+  const nm=inp.value.trim();
+  if(!nm||PRODUCTS.includes(nm)){alert(nm?nm+' already exists!':'Enter a name');return;}
+  PRODUCTS.push(nm);saveProducts();
+  ['inventories','receivables','returns','sales'].forEach(function(k){D[k].forEach(function(r){if(!r.items[nm])r.items[nm]={kg:'',pcs:''};});});
+  save();render();
+}
+function resetProds(){if(!confirm('Reset products?'))return;PRODUCTS=[...DP];saveProducts();render();}
+// Mapping settings
+function saveMapEdit(i){const n=document.getElementById('me-n')?.value.trim(),p=document.getElementById('me-p')?.value,m=parseFloat(document.getElementById('me-m')?.value)||1;if(!n||!p){alert('Fill all fields');return;}MD[i]={n,p,m};saveMapping();S.mapEdit=null;render();}
+function deleteMap(i){if(!confirm('Delete mapping?'))return;MD.splice(i,1);saveMapping();render();}
+function addMap(){const n=document.getElementById('mn-n')?.value.trim(),p=document.getElementById('mn-p')?.value,m=parseFloat(document.getElementById('mn-m')?.value)||1;if(!n||!p){alert('Fill all fields');return;}MD.unshift({n,p,m});saveMapping();render();}
+function resetMapping(){if(!confirm('Reset mapping?'))return;MD=JSON.parse(JSON.stringify(DM));saveMapping();render();}
+
+// ─── Stock Map Settings ───────────────────────────
+function renderSettingsStockMap(){
+  const srch=(S.smSearch||'').toUpperCase();
+  const maps=SMD.filter(m=>!srch||m.n.toUpperCase().includes(srch)||m.p.toUpperCase().includes(srch));
+  const ei=S.smEdit;
+  let h=`<div class="card">
+    <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
+      <input class="srch" type="text" placeholder="🔍 Search stock mapping..." value="${S.smSearch||''}" oninput="S.smSearch=this.value;render()" style="flex:1;font-size:11px">
+      <button class="btn" style="background:#6A1B9A;color:#fff;font-size:11px" onclick="resetStockMap()">🔄 Reset</button>
+    </div>
+    <p style="font-size:11px;color:#78909C;margin-bottom:8px">${SMD.length} mappings | ${maps.length} shown — Accounting System → Inventory Products</p>
+    <div style="border-radius:8px;border:1px solid #ECEFF1;overflow:hidden;margin-bottom:12px">
+    <table class="mtbl"><thead><tr>
+      <th>#</th><th>Accounting System Name</th><th>→ Product</th><th style="width:45px">×</th><th style="width:60px">Actions</th>
+    </tr></thead><tbody>`;
+  maps.forEach(m=>{
+    const ri=SMD.indexOf(m),editing=ei===ri;
+    if(editing){
+      h+=`<tr style="background:#F3E5F5"><td style="color:#B0BEC5;font-size:10px">${ri+1}</td>
+        <td><input class="fi" id="sme-n" type="text" value="${m.n}" style="width:100%;padding:3px 6px;font-size:10px"></td>
+        <td><select class="fi" id="sme-p" style="width:100%;padding:3px 6px;font-size:10px">${PRODUCTS.map(p=>`<option value="${p}"${p===m.p?' selected':''}>${p}</option>`).join('')}</select></td>
+        <td><input class="fi" id="sme-m" type="number" step="0.01" value="${m.m}" style="width:100%;padding:3px 5px;font-size:10px"></td>
+        <td><button class="btn" style="background:#2E7D32;color:#fff;padding:2px 6px;font-size:10px" onclick="saveSmEdit(${ri})">✓</button>
+            <button class="btn" style="background:#ECEFF1;color:#546E7A;padding:2px 6px;font-size:10px" onclick="S.smEdit=null;render()">✗</button></td>
+      </tr>`;
+    } else {
+      h+=`<tr><td style="color:#B0BEC5;font-size:10px">${ri+1}</td>
+        <td style="font-size:10px;color:#37474F;word-break:break-word">${m.n}</td>
+        <td style="font-size:10px;font-weight:600;color:#6A1B9A">${m.p}</td>
+        <td style="text-align:center;font-size:10px">${m.m}</td>
+        <td><button class="btn" style="background:#F3E5F5;color:#6A1B9A;padding:2px 5px;font-size:10px" onclick="S.smEdit=${ri};render()">✏️</button>
+            <button class="btn" style="background:#FFEBEE;color:#C62828;padding:2px 5px;font-size:10px" onclick="deleteSm(${ri})">🗑️</button></td>
+      </tr>`;
+    }
+  });
+  if(!maps.length)h+=`<tr><td colspan="5" style="text-align:center;padding:16px;color:#90A4AE">No mappings found</td></tr>`;
+  h+=`</tbody></table></div>
+  <div style="font-size:11px;color:#546E7A;margin-bottom:6px;font-weight:600">+ Add New Stock Mapping</div>
+  <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:flex-end">
+    <div style="flex:2;min-width:130px"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Accounting Name</div>
+      <input class="fi" id="smn-n" type="text" placeholder="e.g. FRESH CHI. BREAST" style="width:100%;font-size:11px"></div>
+    <div style="flex:1;min-width:100px"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">→ Product</div>
+      <select class="fi" id="smn-p" style="width:100%;font-size:11px">${PRODUCTS.map(p=>`<option value="${p}">${p}</option>`).join('')}</select></div>
+    <div style="width:65px"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">× Factor</div>
+      <input class="fi" id="smn-m" type="number" step="0.01" value="1" style="width:100%;font-size:11px"></div>
+    <button class="btn" style="background:#6A1B9A;color:#fff;font-size:11px;align-self:flex-end" onclick="addSm()">+ Add</button>
+  </div></div>`;return h;
+}
+function saveSmEdit(i){const n=document.getElementById('sme-n')?.value.trim(),p=document.getElementById('sme-p')?.value,m=parseFloat(document.getElementById('sme-m')?.value)||1;if(!n||!p){alert('Fill all fields');return;}SMD[i]={n,p,m};saveStockMapping();S.smEdit=null;render();}
+function deleteSm(i){if(!confirm('Delete?'))return;SMD.splice(i,1);saveStockMapping();render();}
+function addSm(){const n=document.getElementById('smn-n')?.value.trim(),p=document.getElementById('smn-p')?.value,m=parseFloat(document.getElementById('smn-m')?.value)||1;if(!n||!p){alert('Fill all fields');return;}SMD.unshift({n,p,m});saveStockMapping();render();}
+function resetStockMap(){if(!confirm('Reset stock mapping to defaults?'))return;SMD=JSON.parse(JSON.stringify(DSM));saveStockMapping();render();}
+// Excel
+function processExcel(buf,name){
+  try{
+    const wb=XLSX.read(buf,{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    const result=[],converted={},unmatched=[];PRODUCTS.forEach(p=>converted[p]=0);
+    let start=1;for(let i=0;i<Math.min(rows.length,5);i++){if(rows[i].some(c=>String(c).toLowerCase().includes('name'))){start=i+1;break;}}
+    for(let i=start;i<rows.length;i++){const row=rows[i];const rn=String(row[1]||'').trim();const qty=parseFloat(row[2])||0;if(!rn||rn.toLowerCase()==='total')continue;const map=lookupMap(rn);const entry={name:rn,qty,matched:!!map,product:map?map.p:'',multiplier:map?map.m:0,converted:map?(qty*map.m):0};result.push(entry);if(map&&qty>0)converted[map.p]=(converted[map.p]||0)+(qty*map.m);else if(qty>0)unmatched.push({name:rn,qty});}
+    UP={step:'result',fileName:name,date:new Date().toISOString().split('T')[0],rows:result,converted,unmatched};
+  }catch(e){alert('Error: '+e.message);UP.step='upload';}render();
+}
+function handleFile(inp){const f=inp.files[0];if(!f)return;const reader=new FileReader();reader.onload=e=>processExcel(e.target.result,f.name);reader.readAsArrayBuffer(f);}
+function handleDrop(e){e.preventDefault();document.getElementById('uz')?.classList.remove('drag');const f=e.dataTransfer.files[0];if(!f)return;const reader=new FileReader();reader.onload=ev=>processExcel(ev.target.result,f.name);reader.readAsArrayBuffer(f);}
+function saveSalesRec(){
+  const items=emptyItems();
+  PRODUCTS.forEach(p=>{if((UP.converted[p]||0)>0){if(C_MAP[p])items[p]={kg:'',pcs:UP.converted[p].toFixed(0)};else items[p]={kg:UP.converted[p].toFixed(3),pcs:''};}}); 
+  D.sales=[{id:gid(),date:UP.date,notes:UP.fileName,items:compactItems(items)},...D.sales];
+  save();UP.step='upload';UP.rows=[];render();
+}
+
+// ─── Generic HTML capture ───────────────────────────
+async function captureHTML(html){
+  const div=document.createElement('div');
+  div.style.cssText='position:fixed;left:-9999px;top:0;z-index:-999;pointer-events:none';
+  div.innerHTML=html;document.body.appendChild(div);
+  try{
+    const canvas=await html2canvas(div.firstChild,{backgroundColor:'#ffffff',scale:2,useCORS:true,logging:false});
+    document.body.removeChild(div);return canvas;
+  }catch(e){document.body.removeChild(div);throw e;}
+}
+
+// ─── Build formula result HTML for export ───────────
+function buildFormulaExportHTML(fid){
+  const fa=fid==='a'?FA:FB;
+  const fname=fid==='a'?'Formula A':'Formula B';
+  const fcolor=fid==='a'?'#4527A0':'#00695C';
+  if(!fa.length)return null;
+  const totals=calcFormula(fa);
+  const vis=PRODUCTS.filter(p=>{const v=totals[p];return v&&(v.kg!==0||v.pcs!==0);});
+  const combTotal=PARENT_PRODUCTS.reduce((s,p)=>s+getTotalKg(totals,p),0);
+
+  // Formula chips summary
+  const chips=fa.map(op=>{
+    const f=findRecord(op.id);if(!f)return'';
+    const r=f.record,inf=TYPE_INFO[f.type]||{emoji:'📄',label:'Record'};
+    const opStr=op.op==='+'?'+':(op.op==='-'?'−':'○');
+    const bg=op.op==='+'?'#E8F5E9':op.op==='-'?'#FFEBEE':'#F5F5F5';
+    const col=op.op==='+'?'#2E7D32':op.op==='-'?'#C62828':'#9E9E9E';
+    return`<span style="display:inline-flex;align-items:center;gap:4px;background:${bg};color:${col};border-radius:15px;padding:3px 8px;font-size:11px;font-weight:600;margin:2px;${op.op==='skip'?'text-decoration:line-through;opacity:.6':''}">${opStr} ${inf.emoji} ${r.date}${r.notes?' — '+r.notes:''}</span>`;
+  }).join('');
+
+  const rows=vis.map((p,i)=>{
+    const is500=!!C_MAP[p];const v=totals[p];
+    const dispVal=is500?v.pcs:v.kg;const ul=is500?'pcs':'kg';
+    const ck=getTotalKg(totals,p);const fp=is500?0:(ck-(v.kg||0));
+    return`<tr style="background:${is500?'#FDF8FF':i%2===0?'#fff':'#F8F8F8'}">
+      <td style="padding:5px 7px;color:#9E9E9E;font-size:11px">${PRODUCTS.indexOf(p)+1}</td>
+      <td style="padding:5px 7px;font-size:12px;${is500?'color:#7B1FA2':'font-weight:600;color:#1B5E20'}">${is500?'↳ ':''}${p}</td>
+      <td style="padding:5px 7px;text-align:center;font-weight:700;font-size:12px;color:${is500?'#7B1FA2':'#1565C0'}">${dispVal!==0?(dispVal.toFixed(dispVal%1===0?0:2)+' '+ul):'—'}</td>
+      <td style="padding:5px 7px;text-align:center;background:${!is500&&ck!==0?(ck>0?'#E0F2F1':'#FFEBEE'):'#F5FAFA'}">
+        ${!is500&&ck!==0?`<span style="font-weight:700;color:${ck>0?'#00695C':'#C62828'};font-size:12px">${ck.toFixed(2)}</span>${fp!==0?`<br><span style="font-size:9px;color:${fp>0?'#2E7D32':'#C62828'}">${fp>0?'+':''}${fp.toFixed(2)}</span>`:''}`:
+        '<span style="color:#CFD8DC">—</span>'}
+      </td>
+    </tr>`;
+  }).join('');
+
+  return`<div style="font-family:Segoe UI,Tahoma,sans-serif;background:#fff;padding:20px;width:500px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding-bottom:10px;border-bottom:3px solid ${fcolor}">
+      <span style="font-size:26px">🐔</span>
+      <div><div style="font-size:15px;font-weight:700;color:#0D1B2A">Chicken Inventory System</div>
+        <div style="font-size:9px;color:#78909C">Stock Management System</div></div>
+      <div style="margin-left:auto;background:${fcolor}15;padding:6px 12px;border-radius:8px">
+        <div style="font-size:13px;font-weight:700;color:${fcolor}">🧮 ${fname}</div>
+      </div>
+    </div>
+    <div style="margin-bottom:12px"><div style="font-size:10px;color:#78909C;margin-bottom:5px">Formula includes:</div>
+      <div style="display:flex;flex-wrap:wrap;gap:3px">${chips}</div></div>
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="background:#263238;color:#fff">
+        <th style="padding:6px 7px;font-size:11px">#</th>
+        <th style="padding:6px 7px;text-align:left;font-size:11px">Product</th>
+        <th style="padding:6px 7px;text-align:center;font-size:11px">Qty</th>
+        <th style="padding:6px 7px;text-align:center;background:#00695C;font-size:11px">Combined KG</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr style="background:#263238;color:#fff;font-weight:700">
+        <td colspan="3" style="padding:6px 7px;font-size:11px">TOTAL COMBINED KG</td>
+        <td style="text-align:center;padding:6px 7px;background:#00695C;font-size:12px">${combTotal.toFixed(2)} kg</td>
+      </tr></tfoot>
+    </table>
+    <div style="margin-top:8px;text-align:right;font-size:9px;color:#B0BEC5">Generated: ${new Date().toLocaleString()}</div>
+  </div>`;
+}
+
+// ─── Build diff result HTML for export ─────────────
+function buildDiffExportHTML(){
+  if(!FA.length||!FB.length)return null;
+  const totA=calcFormula(FA),totB=calcFormula(FB);
+  const allVis=PRODUCTS.filter(p=>!C_MAP[p]&&(getTotalKg(totA,p)!==0||getTotalKg(totB,p)!==0));
+  const grandA=PARENT_PRODUCTS.reduce((s,p)=>s+getTotalKg(totA,p),0);
+  const grandB=PARENT_PRODUCTS.reduce((s,p)=>s+getTotalKg(totB,p),0);
+  const grandD=grandB-grandA;
+
+  const rows=allVis.map((p,i)=>{
+    const ckA=getTotalKg(totA,p),ckB=getTotalKg(totB,p),d=ckB-ckA;
+    return`<tr style="background:${i%2===0?'#fff':'#F8F8F8'}">
+      <td style="padding:5px 7px;color:#9E9E9E;font-size:11px">${PRODUCTS.indexOf(p)+1}</td>
+      <td style="padding:5px 7px;font-weight:600;color:#1B5E20;font-size:12px">${p}</td>
+      <td style="padding:5px 7px;text-align:center;color:${ckA!==0?'#4527A0':'#CFD8DC'};font-size:12px">${ckA!==0?ckA.toFixed(2):'—'}</td>
+      <td style="padding:5px 7px;text-align:center;color:${ckB!==0?'#00695C':'#CFD8DC'};font-size:12px">${ckB!==0?ckB.toFixed(2):'—'}</td>
+      <td style="padding:5px 7px;text-align:center;font-weight:700;color:${d>0?'#1B5E20':d<0?'#B71C1C':'#9E9E9E'};background:${d>0?'#F1F8E9':d<0?'#FFF5F5':'#F5F5F5'};font-size:12px">${d!==0?(d>0?'+':'')+d.toFixed(2):'—'}</td>
+    </tr>`;
+  }).join('');
+
+  return`<div style="font-family:Segoe UI,Tahoma,sans-serif;background:#fff;padding:20px;width:520px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding-bottom:10px;border-bottom:3px solid #BF360C">
+      <span style="font-size:26px">🐔</span>
+      <div><div style="font-size:15px;font-weight:700">Chicken Inventory System</div>
+        <div style="font-size:9px;color:#78909C">Stock Management System</div></div>
+      <div style="margin-left:auto;background:#FBE9E7;padding:6px 12px;border-radius:8px">
+        <div style="font-size:13px;font-weight:700;color:#BF360C">⚖️ Difference (B−A)</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:12px">
+      <div style="background:#EDE7F6;padding:7px 12px;border-radius:8px;flex:1;text-align:center">
+        <div style="font-size:10px;color:#78909C">Formula A</div>
+        <div style="font-size:14px;font-weight:700;color:#4527A0">${grandA.toFixed(2)} KG</div>
+      </div>
+      <div style="display:flex;align-items:center;font-size:16px;color:#546E7A">→</div>
+      <div style="background:#E0F2F1;padding:7px 12px;border-radius:8px;flex:1;text-align:center">
+        <div style="font-size:10px;color:#78909C">Formula B</div>
+        <div style="font-size:14px;font-weight:700;color:#00695C">${grandB.toFixed(2)} KG</div>
+      </div>
+      <div style="display:flex;align-items:center;font-size:16px;color:#546E7A">=</div>
+      <div style="background:${grandD>0?'#E8F5E9':grandD<0?'#FFEBEE':'#ECEFF1'};padding:7px 12px;border-radius:8px;flex:1;text-align:center">
+        <div style="font-size:10px;color:#78909C">Difference</div>
+        <div style="font-size:14px;font-weight:700;color:${grandD>0?'#2E7D32':grandD<0?'#C62828':'#546E7A'}">${grandD>=0?'+':''}${grandD.toFixed(2)} KG</div>
+      </div>
+    </div>
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="background:#263238;color:#fff">
+        <th style="padding:6px 7px;font-size:11px">#</th>
+        <th style="padding:6px 7px;text-align:left;font-size:11px">Product</th>
+        <th style="padding:6px 7px;text-align:center;background:#4527A0CC;font-size:11px">Formula A</th>
+        <th style="padding:6px 7px;text-align:center;background:#00695CCC;font-size:11px">Formula B</th>
+        <th style="padding:6px 7px;text-align:center;background:#BF360C;font-size:11px">B − A</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr style="background:#263238;color:#fff;font-weight:700">
+        <td colspan="2" style="padding:6px 7px">TOTAL</td>
+        <td style="text-align:center;padding:6px 7px;background:#4527A0CC">${grandA.toFixed(2)}</td>
+        <td style="text-align:center;padding:6px 7px;background:#00695CCC">${grandB.toFixed(2)}</td>
+        <td style="text-align:center;padding:6px 7px;background:#BF360C">${grandD>=0?'+':''}${grandD.toFixed(2)}</td>
+      </tr></tfoot>
+    </table>
+    <div style="margin-top:8px;text-align:right;font-size:9px;color:#B0BEC5">Generated: ${new Date().toLocaleString()}</div>
+  </div>`;
+}
+
+// ─── Export formula/diff ────────────────────────────
+async function exportFormulaImage(fid){
+  const btn=event.target;btn.textContent='⏳';btn.disabled=true;
+  try{
+    const html=fid==='diff'?buildDiffExportHTML():buildFormulaExportHTML(fid);
+    if(!html){alert('No data to export');btn.textContent='🖼️';btn.disabled=false;return;}
+    const canvas=await captureHTML(html);
+    const a=document.createElement('a');a.href=canvas.toDataURL('image/png');
+    a.download=`formula-${fid==='diff'?'diff':fid}-${new Date().toISOString().split('T')[0]}.png`;a.click();
+  }catch(e){alert('Error: '+e.message);}
+  btn.textContent='🖼️';btn.disabled=false;
+}
+async function exportFormulaPDF(fid){
+  const btn=event.target;btn.textContent='⏳';btn.disabled=true;
+  try{
+    const html=fid==='diff'?buildDiffExportHTML():buildFormulaExportHTML(fid);
+    if(!html){alert('No data to export');btn.textContent='📄';btn.disabled=false;return;}
+    const canvas=await captureHTML(html);
+    const{jsPDF}=window.jspdf;const pdf=new jsPDF('p','mm','a4');
+    const pw=pdf.internal.pageSize.getWidth()-20;
+    const iw=canvas.width/2;const ih=canvas.height/2;
+    const ratio=Math.min(pw/iw*3.7795,280/ih*3.7795);
+    pdf.addImage(canvas.toDataURL('image/png'),'PNG',10,10,(iw/3.7795)*ratio,(ih/3.7795)*ratio);
+    pdf.save(`formula-${fid==='diff'?'diff':fid}-${new Date().toISOString().split('T')[0]}.pdf`);
+  }catch(e){alert('Error: '+e.message);}
+  btn.textContent='📄';btn.disabled=false;
+}
+async function shareFormulaWhatsApp(fid){
+  const btn=event.target;btn.textContent='⏳';btn.disabled=true;
+  try{
+    const html=fid==='diff'?buildDiffExportHTML():buildFormulaExportHTML(fid);
+    if(!html){alert('No data to export');btn.textContent='💬';btn.disabled=false;return;}
+    const canvas=await captureHTML(html);
+    const fname=`formula-${fid==='diff'?'diff':fid}-${new Date().toISOString().split('T')[0]}.png`;
+    canvas.toBlob(async(blob)=>{
+      const file=new File([blob],fname,{type:'image/png'});
+      if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
+        await navigator.share({files:[file],title:'Inventory',text:fid==='diff'?'Difference Result':'Formula Result'});
+      } else {
+        const url=URL.createObjectURL(blob);const a=document.createElement('a');
+        a.href=url;a.download=fname;a.click();URL.revokeObjectURL(url);
+        setTimeout(()=>window.open('https://web.whatsapp.com/','_blank'),500);
+      }
+      btn.textContent='💬';btn.disabled=false;
+    },'image/png');
+  }catch(e){alert('Error: '+e.message);btn.textContent='💬';btn.disabled=false;}
+}
+function exportFormulaXLSX(fid){
+  const isDiff=fid==='diff';
+  let rows,title,fname;
+  if(isDiff){
+    if(!FA.length||!FB.length){alert('Please add records to both Formula A and B');return;}
+    const totA=calcFormula(FA),totB=calcFormula(FB);
+    const grandA=PARENT_PRODUCTS.reduce((s,p)=>s+getTotalKg(totA,p),0);
+    const grandB=PARENT_PRODUCTS.reduce((s,p)=>s+getTotalKg(totB,p),0);
+    rows=[['Chicken Inventory System — Difference (B−A)'],[''],
+      ['Product','Formula A (KG)','Formula B (KG)','Difference (B−A)']];
+    PARENT_PRODUCTS.forEach(p=>{
+      const a=getTotalKg(totA,p),b=getTotalKg(totB,p),d=b-a;
+      if(a!==0||b!==0)rows.push([p,+a.toFixed(3),+b.toFixed(3),+d.toFixed(3)]);
+    });
+    rows.push(['TOTAL',+grandA.toFixed(2),+grandB.toFixed(2),+(grandB-grandA).toFixed(2)]);
+    title='Difference';fname='formula-diff';
+  } else {
+    const fa=fid==='a'?FA:FB;
+    if(!fa.length){alert('Formula is empty');return;}
+    const totals=calcFormula(fa);
+    rows=[['Chicken Inventory System — Formula '+(fid==='a'?'A':'B')],[''],
+      ['#','Product','Qty','Unit','Combined KG']];
+    PRODUCTS.forEach(p=>{
+      const is500=!!C_MAP[p];const val=getVal(totals,p);
+      if(val!==0){const ck=getTotalKg(totals,p);rows.push([PRODUCTS.indexOf(p)+1,p,+val.toFixed(is500?0:3),is500?'pcs':'kg',!is500?+ck.toFixed(3):''  ]);}
+    });
+    rows.push(['','TOTAL COMBINED KG','','',+PARENT_PRODUCTS.reduce((s,p)=>s+getTotalKg(totals,p),0).toFixed(2)]);
+    title='Formula '+(fid==='a'?'A':'B');fname='formula-'+fid;
+  }
+  const wb=XLSX.utils.book_new();const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:5},{wch:32},{wch:14},{wch:10},{wch:15}];
+  XLSX.utils.book_append_sheet(wb,ws,title);
+  XLSX.writeFile(wb,`${fname}-${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
+// ═══ STORAGE OPTIMIZATION ════════════════════════════
+// Only save non-empty items — reduces size by ~85%
+function compactItems(items){
+  const c={};
+  Object.entries(items||{}).forEach(([k,v])=>{
+    if((parseFloat(v.kg)||0)>0||(parseFloat(v.pcs)||0)>0)c[k]=v;
+  });
+  return c;
+}
+function expandItems(compact){
+  const e=emptyItems();
+  Object.entries(compact||{}).forEach(([k,v])=>{if(e[k]!==undefined)e[k]=v;});
+  return e;
+}
+function migrateCompact(){
+  // Migrate existing data to compact format on first run
+  let changed=false;
+  ['inventories','receivables','returns','sales'].forEach(key=>{
+    D[key]=D[key].map(r=>{
+      const c=compactItems(r.items);
+      if(Object.keys(c).length<Object.keys(r.items||{}).length){changed=true;return{...r,items:c};}
+      return r;
+    });
+  });
+  if(changed)save();
+}
+
+// ═══ EXPORT HELPERS ══════════════════════════════════
+// Build a clean HTML card for a record (used by image/PDF export)
+function buildExportHTML(id){
+  const f=findRecord(id);if(!f)return null;
+  const{record:r,type:t}=f;
+  const inf=TYPE_INFO[t]||{emoji:'📄',color:'#546E7A',label:'Record'};
+  const items=expandItems(r.items);
+  const vis=PRODUCTS.filter(p=>getVal(items,p)>0);
+  const combTotal=PARENT_PRODUCTS.reduce((s,p)=>s+getTotalKg(items,p),0);
+
+  const rows=vis.map((p,i)=>{
+    const is500=!!C_MAP[p];
+    const field=is500?'pcs':'kg';
+    const val=items[p]?.[field]||'';
+    const ck=getTotalKg(items,p);
+    const fp=ck-(parseFloat(items[p]?.kg)||0);
+    return`<tr style="background:${is500?'#FDF8FF':i%2===0?'#fff':'#F8F8F8'}">
+      <td style="padding:5px 7px;color:#9E9E9E;font-size:11px;width:28px">${PRODUCTS.indexOf(p)+1}</td>
+      <td style="padding:5px 7px;font-size:12px;${is500?'color:#7B1FA2':'font-weight:600;color:#1B5E20'}">${is500?'↳ ':''}${p}</td>
+      <td style="padding:5px 7px;text-align:center;font-weight:700;color:${is500?'#7B1FA2':'#1565C0'};font-size:12px;width:80px">${val}<span style="font-size:9px;opacity:.7"> ${is500?'pcs':'kg'}</span></td>
+      <td style="padding:5px 7px;text-align:center;background:${!is500&&ck>0?'#E0F2F1':'#F5FAFA'};width:95px">
+        ${!is500&&ck>0?`<span style="font-weight:700;color:#00695C;font-size:12px">${ck.toFixed(2)}</span>${fp>0?`<br><span style="font-size:9px;color:#2E7D32">+${fp.toFixed(2)}</span>`:''}`:
+        '<span style="color:#CFD8DC">—</span>'}
+      </td>
+    </tr>`;
+  }).join('');
+
+  return`<div style="font-family:Segoe UI,Tahoma,sans-serif;background:#fff;padding:20px;width:500px;min-height:200px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:10px;border-bottom:3px solid ${inf.color}">
+      <span style="font-size:28px">🐔</span>
+      <div><div style="font-size:15px;font-weight:700;color:#0D1B2A">Chicken Inventory System</div>
+        <div style="font-size:9px;color:#78909C">Chicken Stock Management</div></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <div style="background:${inf.color}15;padding:6px 12px;border-radius:7px;flex:1;min-width:100px">
+        <div style="font-size:9px;color:#78909C">Type</div>
+        <div style="font-size:12px;font-weight:700;color:${inf.color}">${inf.emoji} ${inf.label}</div>
+      </div>
+      <div style="background:#F3F4F6;padding:6px 12px;border-radius:7px;flex:1;min-width:100px">
+        <div style="font-size:9px;color:#78909C">Date</div>
+        <div style="font-size:12px;font-weight:700;color:#263238">📅 ${r.date}</div>
+      </div>
+      ${r.notes?`<div style="background:#FFF8E1;padding:6px 12px;border-radius:7px;flex:2">
+        <div style="font-size:9px;color:#78909C">Notes</div>
+        <div style="font-size:12px;font-weight:700;color:#E65100">📝 ${r.notes}</div>
+      </div>`:''}
+    </div>
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="background:#263238;color:#fff">
+        <th style="padding:6px 7px;text-align:left;font-size:11px">#</th>
+        <th style="padding:6px 7px;text-align:left;font-size:11px">Product</th>
+        <th style="padding:6px 7px;text-align:center;font-size:11px">Qty</th>
+        <th style="padding:6px 7px;text-align:center;background:#00695C;font-size:11px">Combined KG</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr style="background:#263238;color:#fff;font-weight:700">
+        <td colspan="2" style="padding:6px 7px;font-size:11px">TOTAL</td>
+        <td style="text-align:center;padding:6px 7px;font-size:11px">${totalKg(r).toFixed(2)} kg</td>
+        <td style="text-align:center;padding:6px 7px;background:#00695C;font-size:11px">${combTotal.toFixed(2)} kg</td>
+      </tr></tfoot>
+    </table>
+    <div style="margin-top:10px;text-align:right;font-size:9px;color:#B0BEC5">
+      Generated: ${new Date().toLocaleString()} | Chicken Inventory System
+    </div>
+  </div>`;
+}
+
+async function captureRecord(id){
+  const html=buildExportHTML(id);if(!html)throw new Error('Record not found');
+  const div=document.createElement('div');
+  div.style.cssText='position:fixed;left:-9999px;top:0;z-index:-999;pointer-events:none';
+  div.innerHTML=html;document.body.appendChild(div);
+  try{
+    const canvas=await html2canvas(div.firstChild,{backgroundColor:'#ffffff',scale:2,useCORS:true,logging:false});
+    return{canvas,div};
+  }catch(e){document.body.removeChild(div);throw e;}
+}
+
+async function exportImage(id){
+  const btn=event.target;btn.textContent='⏳';btn.disabled=true;
+  try{
+    const{canvas,div}=await captureRecord(id);document.body.removeChild(div);
+    const f=findRecord(id);const r=f?.record;
+    const url=canvas.toDataURL('image/png');
+    const a=document.createElement('a');a.href=url;
+    a.download=`inventory-${r?.date||'record'}-${r?.notes||''}.png`.replace(/\s+/g,'-');
+    a.click();
+  }catch(e){alert('Error: '+e.message);}
+  btn.textContent='🖼️';btn.disabled=false;
+}
+
+async function exportPDF(id){
+  const btn=event.target;btn.textContent='⏳';btn.disabled=true;
+  try{
+    const{canvas,div}=await captureRecord(id);document.body.removeChild(div);
+    const f=findRecord(id);const r=f?.record;
+    const{jsPDF}=window.jspdf;
+    const pdf=new jsPDF('p','mm','a4');
+    const pw=pdf.internal.pageSize.getWidth()-20;
+    const iw=canvas.width/2;const ih=canvas.height/2;
+    const ratio=Math.min(pw/iw*3.7795,280/ih*3.7795);
+    const sw=(iw/3.7795)*ratio;const sh=(ih/3.7795)*ratio;
+    pdf.addImage(canvas.toDataURL('image/png'),'PNG',10,10,sw,sh);
+    pdf.save(`inventory-${r?.date||'record'}-${r?.notes||''}.pdf`.replace(/\s+/g,'-'));
+  }catch(e){alert('Error: '+e.message);}
+  btn.textContent='📄';btn.disabled=false;
+}
+
+async function shareWhatsApp(id){
+  const btn=event.target;btn.textContent='⏳';btn.disabled=true;
+  try{
+    const{canvas,div}=await captureRecord(id);document.body.removeChild(div);
+    const f=findRecord(id);const r=f?.record;
+    const fname=`inventory-${r?.date||'record'}.png`;
+    canvas.toBlob(async(blob)=>{
+      const file=new File([blob],fname,{type:'image/png'});
+      if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
+        await navigator.share({files:[file],title:'Inventory',text:`${r?.date}${r?.notes?' - '+r.notes:''}`});
+      } else {
+        // Fallback: download then open WhatsApp
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');a.href=url;a.download=fname;a.click();
+        URL.revokeObjectURL(url);
+        setTimeout(()=>window.open('https://web.whatsapp.com/','_blank'),500);
+      }
+      btn.textContent='💬';btn.disabled=false;
+    },'image/png');
+  }catch(e){alert('Error: '+e.message);btn.textContent='💬';btn.disabled=false;}
+}
+
+function exportRecordXLSX(id){
+  const f=findRecord(id);if(!f)return;
+  const{record:r,type:t}=f;
+  const inf=TYPE_INFO[t]||{emoji:'📄',label:'Record'};
+  const items=expandItems(r.items);
+  const rows=[
+    ['Chicken Inventory System','','','',''],
+    ['','','','',''],
+    ['Type:',inf.label,'Date:',r.date,'Notes:',r.notes||''],
+    ['','','','',''],
+    ['#','Product','Qty','Unit','Combined KG'],
+  ];
+  PRODUCTS.forEach(p=>{
+    const is500=!!C_MAP[p];const val=getVal(items,p);
+    if(val>0){
+      const ck=getTotalKg(items,p);
+      rows.push([PRODUCTS.indexOf(p)+1,p,val,is500?'pcs':'kg',!is500?+ck.toFixed(3):'']);
+    }
+  });
+  rows.push(['','TOTAL KG',+totalKg(r).toFixed(2),'',+PARENT_PRODUCTS.reduce((s,p)=>s+getTotalKg(items,p),0).toFixed(2)]);
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:5},{wch:32},{wch:10},{wch:8},{wch:15}];
+  XLSX.utils.book_append_sheet(wb,ws,inf.label);
+  XLSX.writeFile(wb,`${inf.label}-${r.date}${r.notes?'-'+r.notes:''}.xlsx`.replace(/\s+/g,'-'));
+}
+
+// ═══ EXPORT / IMPORT + ONEDRIVE ══════════════════════
+function exportData(){
+  const data={version:3,exportDate:new Date().toISOString(),PRODUCTS,MD,SMD,D,FA,FB};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const fname='chicken-inventory-'+new Date().toISOString().split('T')[0]+'.json';
+  const a=document.createElement('a');a.href=url;a.download=fname;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  return fname;
+}
+
+function saveToOneDrive(){
+  const fname=exportData();
+  const modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML=`<div style="background:#fff;border-radius:16px;padding:22px;max-width:360px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <span style="font-size:28px">☁️</span>
+      <div><div style="font-size:15px;font-weight:700;color:#0078D4">Save to OneDrive</div>
+        <div style="font-size:11px;color:#546E7A">Downloaded: <b>${fname}</b></div></div>
+    </div>
+    <div style="background:#E3F2FD;border-radius:10px;padding:14px;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:700;color:#1565C0;margin-bottom:7px">📱 On Phone:</div>
+      <div style="font-size:12px;color:#37474F;line-height:1.9">
+        1. Open <b>Downloads</b> on your phone<br>
+        2. Hold on the file → <b>Share</b><br>
+        3. Choose <b>OneDrive</b> app<br>
+        4. Pick your folder → <b>Save</b>
+      </div>
+    </div>
+    <div style="background:#E8F5E9;border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:#2E7D32;margin-bottom:7px">💻 On Computer:</div>
+      <div style="font-size:12px;color:#37474F;line-height:1.9">
+        1. File is in your <b>Downloads</b> folder<br>
+        2. Move/copy it to your <b>OneDrive folder</b><br>
+        <span style="color:#78909C">— or upload via web ↓</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="window.open('https://onedrive.live.com/upload','_blank')"
+        style="flex:1;padding:10px;background:#0078D4;color:#fff;border:none;border-radius:9px;cursor:pointer;font-size:13px;font-weight:600">
+        🌐 Open OneDrive
+      </button>
+      <button onclick="this.closest('[style*=inset]').remove()"
+        style="flex:1;padding:10px;background:#ECEFF1;color:#546E7A;border:none;border-radius:9px;cursor:pointer;font-size:13px;font-weight:600">
+        ✓ Done
+      </button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+}
+
+function importData(input){
+  const f=input.files[0];if(!f)return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const data=JSON.parse(e.target.result);
+      if(!data.version||!data.D){alert('Invalid file format');return;}
+      if(!confirm('This will REPLACE all current data. Continue?'))return;
+      if(data.PRODUCTS){PRODUCTS=data.PRODUCTS;saveProducts();}
+      if(data.MD){MD=data.MD;saveMapping();}
+      if(data.D){D=data.D;save();}
+      FA=data.FA||[];FB=data.FB||[];
+      if(data.SMD){SMD=data.SMD;saveStockMapping();}
+      saveFormulas();recompute();
+      render();alert('Data restored successfully!');
+    }catch(ex){alert('Error: '+ex.message);}
+    input.value='';
+  };
+  reader.readAsText(f);
+}
+
+// ═══ BOOT ════════════════════════════════════════════
+loadProducts();loadMapping();loadStockMapping();load();loadFormulas();migrateCompact();render();
+</script>
+</body>
+</html>

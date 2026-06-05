@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://alcdn.msauth.net/browser/3.26.1/js/msal-browser.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',Tahoma,sans-serif;background:#ECEFF1;min-height:100vh}
@@ -299,9 +300,10 @@ function renderHdr(){
       <div class="hs"><div class="hs-v" style="color:#EF9A9A">${D.returns.length}</div><div class="hs-l">Ret</div></div>
       <div class="hs"><div class="hs-v" style="color:#FFE082">${D.sales.length}</div><div class="hs-l">Sales</div></div>
     </div>
-    <div style="display:flex;gap:5px;margin-left:8px">
-      <button id="od-save-btn" onclick="odSave()" title="Save to OneDrive / cloud" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">☁️</button>
-      <button id="od-load-btn" onclick="odLoad()" title="Load from saved location" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">📂</button>
+    <div style="display:flex;gap:5px;margin-left:8px;align-items:center">
+      ${getODUser()?`<span style="font-size:9px;color:#90CAF9;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${getODUser()}</span>`:''}
+      <button id="od-save-btn" onclick="odSave()" title="Save to OneDrive" style="padding:5px 9px;background:${getODUser()?'#0078D4':'rgba(255,255,255,.15)'};border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">☁️</button>
+      <button id="od-load-btn" onclick="odLoad()" title="Load from OneDrive" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">📂</button>
       <button onclick="showHdrMenu()" title="More options" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">⋮</button>
       <input id="fallback-import" type="file" accept=".json" onchange="importData(this)" style="display:none">
     </div>
@@ -623,7 +625,7 @@ async function scanReceiptAI(input){
     const prompt='Analyze this Fresh Chicken Receipt Report image. Return ONLY a JSON object with no markdown:\n{"supplier":"name or null","date":"YYYY-MM-DD or null","ctns":{"1300":32,"1350":17},"cuts":{"breast":0,"legs":0,"drum":0,"thigh":0,"thighbl":0,"wings":0,"liver":0,"gizzard":0,"heart":0,"bone":0}}\nOnly include sizes that have actual numbers. cuts in KG. Omit zero values.';
     let result;
     if(prov==='gemini'){
-      const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,{
+      const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${apiKey}`,{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({contents:[{parts:[{inline_data:{mime_type:file.type,data:b64}},{text:prompt}]}]})
       });
@@ -649,7 +651,9 @@ async function scanReceiptAI(input){
     render();showToast('✅ Scanned! Please verify.');
   }catch(e){
     if(e.message.includes('401')||e.message.includes('API_KEY')||e.message.includes('auth')){
-      alert('❌ API Key غلط أو منتهي!\nتحقق من Settings → 🔑 API Key');
+      alert('❌ API Key غلط!\nتحقق من Settings → 🔑 API Key');
+    } else if(e.message.includes('quota')||e.message.includes('429')||e.message.includes('exceeded')){
+      alert('⚠️ تجاوزت الحد المجاني\nانتظر دقيقة وحاول ثاني\n\nتأكد إنك أخذت المفتاح من aistudio.google.com وليس cloud console');
     } else {
       alert('Scan error: '+e.message);
     }
@@ -1928,28 +1932,25 @@ function exportRecordXLSX(id){
 function showHdrMenu(){
   const existing=document.getElementById('hdr-menu');
   if(existing){existing.remove();return;}
+  const user=getODUser();
   const m=document.createElement('div');
   m.id='hdr-menu';
-  m.style.cssText='position:fixed;top:52px;right:8px;background:#fff;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.2);z-index:9999;min-width:200px;overflow:hidden';
-  m.innerHTML=`
-    <div style="padding:6px 0">
-      <div style="padding:4px 10px;font-size:10px;color:#90A4AE;font-weight:600">CLOUD BACKUP</div>
-      <button onclick="odSave();this.closest('#hdr-menu').remove()" style="width:100%;padding:10px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px"><span>☁️</span> Save to current location</button>
-      <button onclick="odLoad();this.closest('#hdr-menu').remove()" style="width:100%;padding:10px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px"><span>📂</span> Load from saved location</button>
-      <button onclick="odSave(true);this.closest('#hdr-menu').remove()" style="width:100%;padding:10px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;color:#546E7A"><span>📍</span> Save to new location...</button>
-      <button onclick="odLoad(true);this.closest('#hdr-menu').remove()" style="width:100%;padding:10px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;color:#546E7A"><span>🔍</span> Load from different file...</button>
-      <div style="height:1px;background:#ECEFF1;margin:4px 0"></div>
-      <div style="padding:4px 10px;font-size:10px;color:#90A4AE;font-weight:600">LOCAL BACKUP</div>
-      <button onclick="exportData();this.closest('#hdr-menu').remove()" style="width:100%;padding:10px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px"><span>💾</span> Export JSON (download)</button>
-      <label style="width:100%;padding:10px 14px;display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-        <span>📤</span> Import JSON (upload)
-        <input type="file" accept=".json" onchange="importData(this);document.getElementById('hdr-menu')?.remove()" style="display:none">
-      </label>
-      <div style="height:1px;background:#ECEFF1;margin:4px 0"></div>
-      <button onclick="clearHandle();showToast('Location cleared');this.closest('#hdr-menu').remove()" style="width:100%;padding:10px 14px;border:none;background:none;text-align:left;font-size:12px;cursor:pointer;color:#C62828;display:flex;align-items:center;gap:8px"><span>🗑️</span> Clear saved location</button>
-    </div>`;
+  m.style.cssText='position:fixed;top:52px;right:8px;background:#fff;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.2);z-index:9999;min-width:210px;overflow:hidden';
+  m.innerHTML=`<div style="padding:6px 0">
+    <div style="padding:6px 14px;font-size:10px;color:#90A4AE;font-weight:600">ONEDRIVE</div>
+    ${user?`<div style="padding:4px 14px;font-size:11px;color:#0078D4;font-weight:600">✅ ${user}</div>`:''}
+    <button onclick="odSave();this.closest('#hdr-menu').remove()" style="width:100%;padding:9px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px"><span>☁️</span> Save to OneDrive</button>
+    <button onclick="odLoad();this.closest('#hdr-menu').remove()" style="width:100%;padding:9px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px"><span>📂</span> Load from OneDrive</button>
+    ${user?`<button onclick="odSignOut();this.closest('#hdr-menu').remove()" style="width:100%;padding:9px 14px;border:none;background:none;text-align:left;font-size:12px;cursor:pointer;color:#C62828;display:flex;align-items:center;gap:8px"><span>🚪</span> Sign out</button>`:''}
+    <div style="height:1px;background:#ECEFF1;margin:4px 0"></div>
+    <div style="padding:4px 14px;font-size:10px;color:#90A4AE;font-weight:600">LOCAL BACKUP</div>
+    <button onclick="exportData();this.closest('#hdr-menu').remove()" style="width:100%;padding:9px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px"><span>💾</span> Export JSON</button>
+    <label style="width:100%;padding:9px 14px;display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+      <span>📤</span> Import JSON
+      <input type="file" accept=".json" onchange="importData(this);document.getElementById('hdr-menu')?.remove()" style="display:none">
+    </label>
+  </div>`;
   document.body.appendChild(m);
-  // Close on outside click
   setTimeout(()=>document.addEventListener('click',function h(e){if(!m.contains(e.target)){m.remove();document.removeEventListener('click',h);}},true),100);
 }
 function exportData(){
@@ -1963,7 +1964,110 @@ function exportData(){
   return fname;
 }
 
-// ═══ FILE SYSTEM ACCESS API (OneDrive / Any Location) ══
+// ═══ ONEDRIVE MSAL INTEGRATION ═══════════════════════
+const OD_CLIENT_ID='86182a86-981c-46ab-a5e9-c61d8410c64b';
+const OD_REDIRECT='https://derghamz88-blip.github.io/IAT-Inventory-/chicken-inventory.html';
+const OD_SCOPES=['Files.ReadWrite','User.Read'];
+let _msalApp=null;
+
+async function getMSAL(){
+  if(_msalApp)return _msalApp;
+  _msalApp=new msal.PublicClientApplication({
+    auth:{clientId:OD_CLIENT_ID,authority:'https://login.microsoftonline.com/consumers',redirectUri:OD_REDIRECT,navigateToLoginRequestUrl:false},
+    cache:{cacheLocation:'localStorage',storeAuthStateInCookie:false}
+  });
+  await _msalApp.initialize();
+  try{const r=await _msalApp.handleRedirectPromise();if(r)localStorage.setItem('od-user',r.account.name||r.account.username);}catch(e){}
+  return _msalApp;
+}
+
+async function getODToken(){
+  const app=await getMSAL();
+  const accounts=app.getAllAccounts();
+  const req={scopes:OD_SCOPES};
+  if(accounts.length>0){
+    req.account=accounts[0];
+    try{const r=await app.acquireTokenSilent(req);return r.accessToken;}catch(e){}
+  }
+  try{
+    const r=await app.acquireTokenPopup(req);
+    localStorage.setItem('od-user',r.account.name||r.account.username);
+    render();// refresh header to show account
+    return r.accessToken;
+  }catch(e){
+    if(e.errorCode!=='user_cancelled'&&e.name!=='BrowserAuthError')throw e;
+    return null;
+  }
+}
+
+function getODUser(){return localStorage.getItem('od-user')||'';}
+
+async function odSignOut(){
+  const app=await getMSAL();
+  const accounts=app.getAllAccounts();
+  if(accounts.length>0)await app.logoutPopup({account:accounts[0]}).catch(()=>{});
+  localStorage.removeItem('od-user');render();
+  showToast('Signed out from OneDrive');
+}
+
+async function odSave(forceNew=false){
+  const btn=document.getElementById('od-save-btn');
+  if(btn){btn.textContent='⏳';btn.disabled=true;}
+  try{
+    showToast('🔐 Connecting...');
+    const token=await getODToken();
+    if(!token){showToast('Cancelled');return;}
+    const data={version:3,exportDate:new Date().toISOString(),PRODUCTS,MD,SMD,SH_DATA,D,FA,FB};
+    const json=JSON.stringify(data,null,2);
+    showToast('☁️ Saving to OneDrive...');
+    const resp=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/IAT-Inventory/IAT-Inventory-Backup.json:/content',{
+      method:'PUT',
+      headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+      body:json
+    });
+    if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e.error?.message||'HTTP '+resp.status);}
+    showToast('✅ Saved to OneDrive/IAT-Inventory/');
+  }catch(e){alert('OneDrive error: '+e.message);}
+  if(btn){btn.textContent='☁️';btn.disabled=false;}
+}
+
+async function odLoad(){
+  const btn=document.getElementById('od-load-btn');
+  if(btn){btn.textContent='⏳';btn.disabled=true;}
+  try{
+    showToast('🔐 Connecting...');
+    const token=await getODToken();
+    if(!token){showToast('Cancelled');return;}
+    showToast('📂 Loading from OneDrive...');
+    // List files in folder
+    const listResp=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/IAT-Inventory:/children',{headers:{'Authorization':'Bearer '+token}});
+    let fileId=null;
+    if(listResp.ok){
+      const list=await listResp.json();
+      const files=(list.value||[]).filter(f=>f.name.endsWith('.json')).sort((a,b)=>new Date(b.lastModifiedDateTime)-new Date(a.lastModifiedDateTime));
+      if(!files.length){alert('No backup files in OneDrive/IAT-Inventory/\nSave first!');return;}
+      fileId=files[0].id;
+    } else {alert('Folder not found. Save first!');return;}
+    const fileResp=await fetch('https://graph.microsoft.com/v1.0/me/drive/items/'+fileId+'/content',{headers:{'Authorization':'Bearer '+token}});
+    if(!fileResp.ok)throw new Error('HTTP '+fileResp.status);
+    const data=await fileResp.json();
+    if(!data.version||!data.D){alert('Invalid file');return;}
+    if(!confirm('Restore from OneDrive backup?\nReplaces all current data.'))return;
+    applyBackup(data);showToast('✅ Restored from OneDrive!');
+  }catch(e){alert('OneDrive load error: '+e.message);}
+  if(btn){btn.textContent='📂';btn.disabled=false;}
+}
+
+function applyBackup(data){
+  if(data.PRODUCTS){PRODUCTS=data.PRODUCTS;saveProducts();}
+  if(data.MD){MD=data.MD;saveMapping();}
+  if(data.SMD){SMD=data.SMD;saveStockMapping();}
+  if(data.SH_DATA){SH_DATA=data.SH_DATA;saveSH();}
+  if(data.D){D=data.D;save();}
+  FA=data.FA||[];FB=data.FB||[];
+  saveFormulas();recompute();render();
+}
+
 // Stores the file handle in IndexedDB so path is remembered
 
 function openHandleDB(){
@@ -2100,7 +2204,10 @@ function importData(input){
 }
 
 // ═══ BOOT ════════════════════════════════════════════
-loadProducts();loadMapping();loadStockMapping();loadSH();loadRP();load();loadFormulas();migrateCompact();render();
+loadProducts();loadMapping();loadStockMapping();loadSH();loadRP();load();loadFormulas();migrateCompact();
+// Init MSAL to handle redirect response on page load
+if(typeof msal!=='undefined')getMSAL().catch(()=>{});
+render();
 </script>
 </body>
 </html>

@@ -306,7 +306,8 @@ function renderHdr(){
       <div class="hs"><div class="hs-v" style="color:#FFE082">${D.sales.length}</div><div class="hs-l">Sales</div></div>
     </div>
     <div style="display:flex;gap:5px;margin-left:8px;align-items:center">
-      <button onclick="odSaveClick()" title="Save backup" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">💾</button>
+      <button onclick="odSaveClick()" title="Save to OneDrive" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">☁️</button>
+      <button onclick="odDebug()" title="OneDrive debug" style="padding:5px 9px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:7px;color:#fff;cursor:pointer;font-size:10px">🔍</button>
       <label title="Restore from file" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">
         📂<input type="file" accept=".json,.txt" onchange="odLoadFile(this)" style="display:none">
       </label>
@@ -1998,38 +1999,72 @@ async function odLogin(action){
   const p=new URLSearchParams({
     client_id:OD_CLIENT_ID,response_type:'code',redirect_uri:OD_REDIRECT,
     scope:'Files.ReadWrite User.Read offline_access',
-    state:s,code_challenge:ch,code_challenge_method:'S256',response_mode:'query'
+    state:s,code_challenge:ch,code_challenge_method:'S256',
+    response_mode:'fragment' // SPA apps return code in hash (#code=...)
   });
   window.location.href='https://login.microsoftonline.com/common/oauth2/v2.0/authorize?'+p;
 }
 
 async function checkODCallback(){
-  const p=new URLSearchParams(window.location.search);
-  const code=p.get('code'),state=p.get('state');
+  // SPA apps return code in fragment (#code=XXX)
+  const hash=window.location.hash;
+  const hs=new URLSearchParams(hash.startsWith('#')?hash.slice(1):hash);
+  // Also check query string as fallback
+  const qs=new URLSearchParams(window.location.search);
+  const code=hs.get('code')||qs.get('code');
+  const state=hs.get('state')||qs.get('state');
+  const error=hs.get('error')||qs.get('error');
+
+  if(error){
+    window.history.replaceState({},'',window.location.pathname+'#');
+    alert('❌ Microsoft error:\n'+(hs.get('error_description')||qs.get('error_description')||error));
+    return;
+  }
   if(!code)return;
+
+  // Clear URL
   window.history.replaceState({},'',window.location.pathname);
-  if(state!==localStorage.getItem('od-s')){alert('Auth error: state mismatch');return;}
-  showToast('🔐 Completing login...');
+  const saved_state=localStorage.getItem('od-s');
+  if(state&&saved_state&&state!==saved_state){alert('Security error: state mismatch\n'+state+' vs '+saved_state);return;}
+
+  showToast('🔐 Getting access token...');
   try{
     const r=await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token',{
       method:'POST',
       headers:{'Content-Type':'application/x-www-form-urlencoded'},
       body:new URLSearchParams({
         client_id:OD_CLIENT_ID,grant_type:'authorization_code',
-        code,redirect_uri:OD_REDIRECT,code_verifier:localStorage.getItem('od-v')
+        code,redirect_uri:OD_REDIRECT,
+        code_verifier:localStorage.getItem('od-v')||''
       }).toString()
     });
     const t=await r.json();
-    if(!r.ok)throw new Error(t.error_description||t.error);
+    if(!r.ok){
+      alert('❌ Token error:\n'+(t.error_description||t.error||JSON.stringify(t)));
+      return;
+    }
     localStorage.setItem('od-at',t.access_token);
     localStorage.setItem('od-ate',String(Date.now()+(t.expires_in||3600)*1000));
     if(t.refresh_token)localStorage.setItem('od-rt',t.refresh_token);
     localStorage.removeItem('od-v');localStorage.removeItem('od-s');
     const action=localStorage.getItem('od-p')||'';localStorage.removeItem('od-p');
-    showToast('✅ Logged in!');
-    if(action==='save')setTimeout(()=>odSaveExec(t.access_token),300);
-    else if(action==='load')setTimeout(()=>odLoadExec(t.access_token),300);
-  }catch(e){alert('Login failed: '+e.message);}
+    showToast('✅ Connected to OneDrive!');
+    if(action==='save')setTimeout(()=>odSaveExec(t.access_token),500);
+    else if(action==='load')setTimeout(()=>odLoadExec(t.access_token),500);
+    else alert('✅ Logged in! Now press ☁️ to save.');
+  }catch(e){
+    alert('❌ Network error:\n'+e.message);
+  }
+}
+
+// Debug helper — shows what's in URL + localStorage
+function odDebug(){
+  const s=window.location.search;
+  const h=window.location.hash;
+  const at=localStorage.getItem('od-at');
+  const v=localStorage.getItem('od-v');
+  const p=localStorage.getItem('od-p');
+  alert('🔍 OneDrive Debug:\n\nURL search: '+(s||'(empty)')+'\nURL hash: '+(h||'(empty)')+'\nToken: '+(at?'✅ exists ('+at.length+' chars)':'❌ none')+'\nVerifier: '+(v?'exists':'none')+'\nPending: '+(p||'none'));
 }
 
 async function odSaveClick(){
@@ -2225,8 +2260,8 @@ function importData(input){
 
 // ═══ BOOT ════════════════════════════════════════════
 loadProducts();loadMapping();loadStockMapping();loadSH();loadRP();load();loadFormulas();migrateCompact();
-checkODCallback();
-render();
+render(); // render first so DOM is ready
+checkODCallback(); // then handle Microsoft redirect callback
 </script>
 </body>
 </html>

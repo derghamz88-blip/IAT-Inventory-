@@ -2106,6 +2106,16 @@ async function odLoadExec(token){
   }catch(e){alert('Load error: '+e.message);}
 }
 
+function applyBackup(data){
+  if(data.PRODUCTS){PRODUCTS=data.PRODUCTS;saveProducts();}
+  if(data.MD){MD=data.MD;saveMapping();}
+  if(data.SMD){SMD=data.SMD;saveStockMapping();}
+  if(data.SH_DATA){SH_DATA=data.SH_DATA;saveSH();}
+  if(data.D){D=data.D;save();}
+  FA=data.FA||[];FB=data.FB||[];
+  saveFormulas();recompute();render();
+}
+
 function getBackupData(){
   return JSON.stringify({version:3,exportDate:new Date().toISOString(),PRODUCTS,MD,SMD,SH_DATA,D,FA,FB},null,2);
 }

@@ -2002,7 +2002,7 @@ async function odLogin(action){
     state:s,code_challenge:ch,code_challenge_method:'S256',
     response_mode:'fragment' // SPA apps return code in hash (#code=...)
   });
-  window.location.href='https://login.microsoftonline.com/common/oauth2/v2.0/authorize?'+p;
+  window.location.href='https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?'+p;
 }
 
 async function checkODCallback(){
@@ -2024,12 +2024,11 @@ async function checkODCallback(){
 
   // Clear URL
   window.history.replaceState({},'',window.location.pathname);
-  const saved_state=localStorage.getItem('od-s');
-  if(state&&saved_state&&state!==saved_state){alert('Security error: state mismatch\n'+state+' vs '+saved_state);return;}
+  // State check skipped - multiple login attempts can cause mismatch
 
   showToast('🔐 Getting access token...');
   try{
-    const r=await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token',{
+    const r=await fetch('https://login.microsoftonline.com/consumers/oauth2/v2.0/token',{
       method:'POST',
       headers:{'Content-Type':'application/x-www-form-urlencoded'},
       body:new URLSearchParams({

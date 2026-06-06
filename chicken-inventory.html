@@ -133,20 +133,23 @@ const DSM=[
 ];
 
 // ═══ TABS ════════════════════════════════════════════
+// Products excluded from formula totals (Combined KG)
+const FORMULA_EXCLUDED=['Kashra'];
+
 const TABS=[
   {key:'inventory',    emoji:'📦',ar:'Inventory',    color:'#1565C0',light:'#E3F2FD',border:'#90CAF9'},
   {key:'receivables',  emoji:'📥',ar:'Receivables',  color:'#2E7D32',light:'#E8F5E9',border:'#A5D6A7'},
   {key:'returns',      emoji:'🔄',ar:'Returns',      color:'#C62828',light:'#FFEBEE',border:'#EF9A9A'},
   {key:'sales',        emoji:'📤',ar:'Sales',        color:'#F57F17',light:'#FFFDE7',border:'#FFE082'},
   {key:'stocksummary', emoji:'📊',ar:'Sys.Stock',    color:'#6A1B9A',light:'#F3E5F5',border:'#CE93D8'},
+  {key:'waste',        emoji:'♻️',ar:'Waste',        color:'#37474F',light:'#ECEFF1',border:'#B0BEC5'},
   {key:'records',      emoji:'📋',ar:'Records',      color:'#0288D1',light:'#E1F5FE',border:'#81D4FA'},
   {key:'formulaA',     emoji:'🧮',ar:'Formula A',    color:'#4527A0',light:'#EDE7F6',border:'#B39DDB'},
   {key:'formulaB',     emoji:'🧮',ar:'Formula B',    color:'#00695C',light:'#E0F2F1',border:'#80CBC4'},
   {key:'diff',         emoji:'⚖️',ar:'Difference',   color:'#BF360C',light:'#FBE9E7',border:'#FFAB91'},
   {key:'settings',     emoji:'⚙️',ar:'Settings',     color:'#455A64',light:'#ECEFF1',border:'#B0BEC5'},
 ];
-// Row 1 = data entry, Row 2 = analysis
-const TABS_R1=['inventory','receivables','returns','sales','stocksummary'];
+const TABS_R1=['inventory','receivables','returns','sales','stocksummary','waste'];
 const TABS_R2=['records','formulaA','formulaB','diff','settings'];
 
 const TYPE_INFO={
@@ -155,6 +158,7 @@ const TYPE_INFO={
   returns:      {emoji:'🔄',color:'#C62828',label:'Return'},
   sales:        {emoji:'📤',color:'#F57F17',label:'Sales'},
   stocksummary: {emoji:'📊',color:'#6A1B9A',label:'Sys.Stock'},
+  waste:        {emoji:'♻️',color:'#37474F',label:'Waste'},
 };
 
 // ═══ STORAGE KEYS ═══════════════════════════════════
@@ -183,13 +187,13 @@ function lookupStockMap(name){const k=name.toUpperCase().trim();return SMD.find(
 let S={tab:'inventory',view:'list',record:null,search:'',expanded:new Set(),
        stab:'products',mapSearch:'',smSearch:'',mapEdit:null,smEdit:null,
        recFilter:'all',faFilter:'all',fbFilter:'all',faFrom:'',faTo:'',fbFrom:'',fbTo:''};
-let D={inventories:[],receivables:[],returns:[],sales:[],stockSummaries:[]};
+let D={inventories:[],receivables:[],returns:[],sales:[],stockSummaries:[],waste:[]};
 let FA=[],FB=[];
 let UP ={step:'upload',fileName:'',date:'',rows:[],converted:{},unmatched:[]};
 let UPS={step:'upload',fileName:'',date:'',rows:[],converted:{},unmatched:[]};
 
 function load(){
-  try{const s=localStorage.getItem(SK);if(s){const d=JSON.parse(s);D={inventories:d.inventories||[],receivables:d.receivables||[],returns:d.returns||[],sales:d.sales||[],stockSummaries:d.stockSummaries||[]};}}
+  try{const s=localStorage.getItem(SK);if(s){const d=JSON.parse(s);D={inventories:d.inventories||[],receivables:d.receivables||[],returns:d.returns||[],sales:d.sales||[],stockSummaries:d.stockSummaries||[],waste:d.waste||[]};}}
   catch(e){}
 }
 function save(){try{localStorage.setItem(SK,JSON.stringify(D));}catch(e){alert('Storage error!');}}
@@ -203,6 +207,7 @@ function dk(t){
   if(t==='receivables')return'receivables';
   if(t==='returns')return'returns';
   if(t==='stocksummary')return'stockSummaries';
+  if(t==='waste')return'waste';
   return'sales';
 }
 function ti(k){return TABS.find(t=>t.key===k);}
@@ -220,7 +225,7 @@ function getTotalKg(items,p){
 
 
 // ═══ FORMULA HELPERS ════════════════════════════════
-const REC_TYPE_MAP={inventories:'inventory',receivables:'receivables',returns:'returns',sales:'sales',stockSummaries:'stocksummary'};
+const REC_TYPE_MAP={inventories:'inventory',receivables:'receivables',returns:'returns',sales:'sales',stockSummaries:'stocksummary',waste:'waste'};
 
 function findRecord(id){
   for(const[key,type] of Object.entries(REC_TYPE_MAP)){
@@ -240,7 +245,7 @@ function calcFormula(ops){
   ops.filter(op=>op.op!=='skip').forEach(op=>{
     const f=findRecord(op.id);if(!f)return;
     const sign=op.op==='+'?1:-1;
-    PRODUCTS.forEach(p=>{
+    PRODUCTS.filter(p=>!FORMULA_EXCLUDED.includes(p)).forEach(p=>{
       tot[p].kg+=sign*(parseFloat(f.record.items?.[p]?.kg)||0);
       tot[p].pcs+=sign*(parseFloat(f.record.items?.[p]?.pcs)||0);
     });
@@ -273,7 +278,7 @@ function render(){
   _scrollTarget=null;
   const{tab,view}=S;
   let h=renderHdr()+renderNav()+'<div class="main">';
-  const entryTabs=['inventory','receivables','returns'];
+  const entryTabs=['inventory','receivables','returns','waste'];
   if(entryTabs.includes(tab)){
     if(tab==='receivables'&&view==='receipt') h+=renderReceiptCalc();
     else h+=view==='list'?renderList():renderForm();
@@ -301,10 +306,11 @@ function renderHdr(){
       <div class="hs"><div class="hs-v" style="color:#FFE082">${D.sales.length}</div><div class="hs-l">Sales</div></div>
     </div>
     <div style="display:flex;gap:5px;margin-left:8px;align-items:center">
-      <button onclick="exportData()" title="Save backup file" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">💾</button>
+      <button onclick="odSaveClick()" title="Save backup" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">💾</button>
       <label title="Restore from file" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">
-        📂<input type="file" accept=".json" onchange="importData(this)" style="display:none">
+        📂<input type="file" accept=".json,.txt" onchange="odLoadFile(this)" style="display:none">
       </label>
+      <input id="od-load-input" type="file" accept=".json,.txt" onchange="odLoadFile(this)" style="display:none">
       <button onclick="showHdrMenu()" title="More" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">⋮</button>
     </div>
   </header>`;
@@ -350,7 +356,7 @@ function renderCard(r,inf){
       <div style="display:flex;gap:4px">
         <button class="btn" style="background:${inf.color};color:#fff;font-size:11px;padding:4px 9px" onclick="toggleCard('${r.id}')">${exp?'▲':'▼'}</button>
         <button class="btn" style="background:#607D8B;color:#fff;padding:4px 7px" onclick="editRec('${r.id}')">✏️</button>
-        <button class="btn" style="background:#D32F2F;color:#fff;padding:4px 7px" onclick="delRec('${r.id}')">🗑️</button>
+        <button class="btn" style="background:#D32F2F;color:#fff;padding:4px 7px" onclick="delRec('${r.id}')">♻️</button>
       </div>
     </div>
     ${exp?`<div style="padding:11px">
@@ -508,14 +514,14 @@ function updRC(){
 }
 function renderReceiptCalc(){
   const inf=ti('receivables');const t=getRCTotals();
-  let sizeHTML='';
+  let sizeHTML='';let tidx=1;
   REC_SIZES.forEach(s=>{
     const cv=RC.ctns[s]||'';const n=parseFloat(cv)||0;
     const pcs=getSizePcs(s);const kg=n*pcs*(s/1000);const hv=n>0;
-    const pcsSel=`<select style="padding:2px 2px;border:1px solid #E0E0E0;border-radius:4px;font-size:10px;background:#fff;color:#546E7A;width:32px" onchange="RC.sizePcs[${s}]=parseInt(this.value);updRC()">${[10,8,6,4,2,1].map(p=>`<option value="${p}"${pcs===p?' selected':''}>${p}</option>`).join('')}</select>`;
+    const pcsSel=`<select tabindex="-1" style="padding:2px 2px;border:1px solid #E0E0E0;border-radius:4px;font-size:10px;background:#fff;color:#546E7A;width:32px" onchange="RC.sizePcs[${s}]=parseInt(this.value);updRC()">${[10,8,6,4,2,1].map(p=>`<option value="${p}"${pcs===p?' selected':''}>${p}</option>`).join('')}</select>`;
     sizeHTML+=`<div style="display:flex;align-items:center;gap:3px;padding:3px 4px;border-radius:6px;background:${hv?'#E8F5E9':'transparent'};margin-bottom:2px">
       <span style="font-size:11px;color:#546E7A;font-weight:600;min-width:38px">${s}g</span>
-      <input type="tel" value="${cv}" placeholder="0"
+      <input type="tel" value="${cv}" placeholder="0" tabindex="${tidx++}"
         style="width:48px;padding:4px 2px;border:1.5px solid ${hv?'#A5D6A7':'#E0E0E0'};border-radius:5px;text-align:center;font-size:13px;font-weight:700;background:#fff;outline:none"
         oninput="RC.ctns[${s}]=this.value" onblur="updRC()" enterkeyhint="next">
       ${pcsSel}
@@ -799,7 +805,7 @@ function renderRecords(){
   let h=`<div class="card">
     <h2 style="margin:0 0 10px;font-size:16px;color:#0288D1">📋 All Records</h2>
     <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px">
-      ${[['all','All',total,'#546E7A'],['inventories','📦',counts.inventories,'#1565C0'],['receivables','📥',counts.receivables,'#2E7D32'],['returns','🔄',counts.returns,'#C62828'],['sales','📤',counts.sales,'#F57F17'],['stockSummaries','📊',(D.stockSummaries||[]).length,'#6A1B9A']].map(([k,l,c,col])=>
+      ${[['all','All',total,'#546E7A'],['inventories','📦',counts.inventories,'#1565C0'],['receivables','📥',counts.receivables,'#2E7D32'],['returns','🔄',counts.returns,'#C62828'],['sales','📤',counts.sales,'#F57F17'],['stockSummaries','📊',(D.stockSummaries||[]).length,'#6A1B9A'],['waste','♻️',(D.waste||[]).length,'#37474F']].map(([k,l,c,col])=>
         `<button class="btn" style="background:${f===k?col:'#ECEFF1'};color:${f===k?'#fff':'#546E7A'};padding:4px 10px;font-size:11px" onclick="S.recFilter='${k}';render()">${l} (${c})</button>`
       ).join('')}
     </div></div>`;
@@ -869,7 +875,7 @@ function renderFormula(fid){
     <!-- Record picker -->
     <div style="font-size:11px;color:#546E7A;margin-bottom:6px;font-weight:600">Add Records:</div>
     <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
-      ${[['all','All'],['inventories','📦'],['receivables','📥'],['returns','🔄'],['sales','📤'],['stockSummaries','📊']].map(([k,l])=>
+      ${[['all','All'],['inventories','📦'],['receivables','📥'],['returns','🔄'],['sales','📤'],['stockSummaries','📊'],['waste','♻️']].map(([k,l])=>
         `<button class="btn" style="background:${ff===k?fcolor:'#ECEFF1'};color:${ff===k?'#fff':'#546E7A'};padding:3px 9px;font-size:11px" onclick="S.${fid==='a'?'faFilter':'fbFilter'}='${k}';render()">${l}</button>`
       ).join('')}
     </div>`;
@@ -1041,7 +1047,7 @@ function renderSettingsProds(){
       <div style="display:flex;gap:2px">
         <button class="btn" style="background:#ECEFF1;color:#546E7A;padding:2px 6px;font-size:10px" onclick="moveProd(${i},-1)" ${i===0?'disabled':''}>↑</button>
         <button class="btn" style="background:#ECEFF1;color:#546E7A;padding:2px 6px;font-size:10px" onclick="moveProd(${i},1)" ${i===PRODUCTS.length-1?'disabled':''}>↓</button>
-        <button class="btn" style="background:#FFEBEE;color:#C62828;padding:2px 6px;font-size:10px" onclick="deleteProd(${i})">🗑️</button>
+        <button class="btn" style="background:#FFEBEE;color:#C62828;padding:2px 6px;font-size:10px" onclick="deleteProd(${i})">♻️</button>
       </div>
     </div>`;
   });
@@ -1083,7 +1089,7 @@ function renderSettingsMap(){
         <td style="font-size:10px;font-weight:600;color:#1565C0">${m.p}</td>
         <td style="text-align:center;font-size:10px">${m.m}</td>
         <td><button class="btn" style="background:#E3F2FD;color:#1565C0;padding:2px 5px;font-size:10px" onclick="S.mapEdit=${ri};render()">✏️</button>
-            <button class="btn" style="background:#FFEBEE;color:#C62828;padding:2px 5px;font-size:10px" onclick="deleteMap(${ri})">🗑️</button></td>
+            <button class="btn" style="background:#FFEBEE;color:#C62828;padding:2px 5px;font-size:10px" onclick="deleteMap(${ri})">♻️</button></td>
       </tr>`;
     }
   });
@@ -1391,7 +1397,7 @@ function renderSettingsStockMap(){
         <td style="font-size:10px;font-weight:600;color:#6A1B9A">${m.p}</td>
         <td style="text-align:center;font-size:10px">${m.m}</td>
         <td><button class="btn" style="background:#F3E5F5;color:#6A1B9A;padding:2px 5px;font-size:10px" onclick="S.smEdit=${ri};render()">✏️</button>
-            <button class="btn" style="background:#FFEBEE;color:#C62828;padding:2px 5px;font-size:10px" onclick="deleteSm(${ri})">🗑️</button></td>
+            <button class="btn" style="background:#FFEBEE;color:#C62828;padding:2px 5px;font-size:10px" onclick="deleteSm(${ri})">♻️</button></td>
       </tr>`;
     }
   });
@@ -1435,7 +1441,7 @@ function renderSettingsSH(){
         <td style="font-size:12px;font-weight:600">${sh.name}</td>
         <td style="text-align:center;font-size:12px;font-weight:700;color:#E65100">${sh.wt} KG</td>
         <td><button class="btn" style="background:#FFF3E0;color:#E65100;padding:2px 5px;font-size:10px" onclick="S.shEdit=${i};render()">✏️</button>
-            <button class="btn" style="background:#FFEBEE;color:#C62828;padding:2px 5px;font-size:10px" onclick="deleteSH(${i})">🗑️</button></td>
+            <button class="btn" style="background:#FFEBEE;color:#C62828;padding:2px 5px;font-size:10px" onclick="deleteSH(${i})">♻️</button></td>
       </tr>`;
     }
   });
@@ -1482,7 +1488,7 @@ function renderSettingsRP(){
           <button class="btn" style="background:#ECEFF1;color:#546E7A;padding:2px 4px;font-size:10px" onclick="moveRP(${i},-1)" ${i===0?'disabled':''}>↑</button>
           <button class="btn" style="background:#ECEFF1;color:#546E7A;padding:2px 4px;font-size:10px" onclick="moveRP(${i},1)" ${i===RP_DATA.length-1?'disabled':''}>↓</button>
           <button class="btn" style="background:#E8F5E9;color:#2E7D32;padding:2px 4px;font-size:10px" onclick="S.rpEdit=${i};render()">✏️</button>
-          <button class="btn" style="background:#FFEBEE;color:#C62828;padding:2px 4px;font-size:10px" onclick="deleteRP(${i})">🗑️</button>
+          <button class="btn" style="background:#FFEBEE;color:#C62828;padding:2px 4px;font-size:10px" onclick="deleteRP(${i})">♻️</button>
         </td>
       </tr>`;
     }
@@ -1932,26 +1938,28 @@ function exportRecordXLSX(id){
 function showHdrMenu(){
   const existing=document.getElementById('hdr-menu');
   if(existing){existing.remove();return;}
-  const user=getODUser();
   const m=document.createElement('div');
   m.id='hdr-menu';
   m.style.cssText='position:fixed;top:52px;right:8px;background:#fff;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.2);z-index:9999;min-width:210px;overflow:hidden';
-  m.innerHTML=`<div style="padding:6px 0">
-    <div style="padding:6px 14px;font-size:10px;color:#90A4AE;font-weight:600">ONEDRIVE</div>
-    ${user?`<div style="padding:4px 14px;font-size:11px;color:#0078D4;font-weight:600">✅ ${user}</div>`:''}
-    <button onclick="odSave();this.closest('#hdr-menu').remove()" style="width:100%;padding:9px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px"><span>☁️</span> Save to OneDrive</button>
-    <button onclick="odLoad();this.closest('#hdr-menu').remove()" style="width:100%;padding:9px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px"><span>📂</span> Load from OneDrive</button>
-    ${user?`<button onclick="odSignOut();this.closest('#hdr-menu').remove()" style="width:100%;padding:9px 14px;border:none;background:none;text-align:left;font-size:12px;cursor:pointer;color:#C62828;display:flex;align-items:center;gap:8px"><span>🚪</span> Sign out</button>`:''}
-    <div style="height:1px;background:#ECEFF1;margin:4px 0"></div>
-    <div style="padding:4px 14px;font-size:10px;color:#90A4AE;font-weight:600">LOCAL BACKUP</div>
-    <button onclick="exportData();this.closest('#hdr-menu').remove()" style="width:100%;padding:9px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px"><span>💾</span> Export JSON</button>
-    <label style="width:100%;padding:9px 14px;display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-      <span>📤</span> Import JSON
-      <input type="file" accept=".json" onchange="importData(this);document.getElementById('hdr-menu')?.remove()" style="display:none">
-    </label>
-  </div>`;
+  m.innerHTML='<div style="padding:6px 0">'
+    +'<div style="padding:6px 14px;font-size:10px;color:#90A4AE;font-weight:600">ONEDRIVE</div>'
+    +'<button onclick="odSaveClick();this.closest(\'#hdr-menu\').remove()" style="width:100%;padding:9px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px"><span>☁️</span> Save to OneDrive</button>'
+    +'<button onclick="odLoadClick();this.closest(\'#hdr-menu\').remove()" style="width:100%;padding:9px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px"><span>📥</span> Load from OneDrive</button>'
+    +'<div style="height:1px;background:#ECEFF1;margin:4px 0"></div>'
+    +'<div style="padding:4px 14px;font-size:10px;color:#90A4AE;font-weight:600">LOCAL BACKUP</div>'
+    +'<button onclick="exportData();this.closest(\'#hdr-menu\').remove()" style="width:100%;padding:9px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px"><span>💾</span> Save JSON file</button>'
+    +'<label style="width:100%;padding:9px 14px;display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><span>📂</span> Restore from file<input type="file" accept=".json" onchange="importData(this);document.getElementById(\'hdr-menu\')?.remove()" style="display:none"></label>'
+    +'</div>';
   document.body.appendChild(m);
   setTimeout(()=>document.addEventListener('click',function h(e){if(!m.contains(e.target)){m.remove();document.removeEventListener('click',h);}},true),100);
+}
+
+function saveAndOpenOneDrive(){
+  exportData();
+  setTimeout(()=>{
+    showToast('📁 File saved! Upload it to OneDrive');
+    window.open('https://onedrive.live.com/upload','_blank');
+  },800);
 }
 function exportData(){
   const data={version:3,exportDate:new Date().toISOString(),PRODUCTS,MD,SMD,SH_DATA,D,FA,FB};
@@ -1964,151 +1972,120 @@ function exportData(){
   return fname;
 }
 
-// ═══ ONEDRIVE MSAL INTEGRATION ═══════════════════════
+// ═══ ONEDRIVE — PKCE OAuth (SPA-compatible, no library) ══
 const OD_CLIENT_ID='86182a86-981c-46ab-a5e9-c61d8410c64b';
 const OD_REDIRECT='https://derghamz88-blip.github.io/IAT-Inventory-/chicken-inventory.html';
-const OD_SCOPES=['Files.ReadWrite','User.Read'];
-let _msalApp=null;
-const IS_MOBILE=/Android|iPhone|iPad|webOS|Mobile/i.test(navigator.userAgent);
 
-async function getMSAL(){
-  if(_msalApp)return _msalApp;
-  _msalApp=new msal.PublicClientApplication({
-    auth:{clientId:OD_CLIENT_ID,authority:'https://login.microsoftonline.com/common',redirectUri:OD_REDIRECT,navigateToLoginRequestUrl:false},
-    cache:{cacheLocation:'localStorage',storeAuthStateInCookie:false}
+function odRandStr(n){
+  const c='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  const a=new Uint8Array(n);crypto.getRandomValues(a);
+  return Array.from(a,x=>c[x%c.length]).join('');
+}
+async function odChallenge(v){
+  const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v));
+  return btoa(String.fromCharCode(...new Uint8Array(d))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+function odGetToken(){
+  const t=localStorage.getItem('od-at');
+  const e=parseInt(localStorage.getItem('od-ate')||'0');
+  return t&&Date.now()<e-60000?t:null;
+}
+
+async function odLogin(action){
+  const v=odRandStr(64),s=odRandStr(16);
+  const ch=await odChallenge(v);
+  localStorage.setItem('od-v',v);localStorage.setItem('od-s',s);localStorage.setItem('od-p',action);
+  const p=new URLSearchParams({
+    client_id:OD_CLIENT_ID,response_type:'code',redirect_uri:OD_REDIRECT,
+    scope:'Files.ReadWrite User.Read offline_access',
+    state:s,code_challenge:ch,code_challenge_method:'S256',response_mode:'query'
   });
-  await _msalApp.initialize();
+  window.location.href='https://login.microsoftonline.com/common/oauth2/v2.0/authorize?'+p;
+}
+
+async function checkODCallback(){
+  const p=new URLSearchParams(window.location.search);
+  const code=p.get('code'),state=p.get('state');
+  if(!code)return;
+  window.history.replaceState({},'',window.location.pathname);
+  if(state!==localStorage.getItem('od-s')){alert('Auth error: state mismatch');return;}
+  showToast('🔐 Completing login...');
   try{
-    const r=await _msalApp.handleRedirectPromise();
-    if(r){
-      localStorage.setItem('od-user',r.account.name||r.account.username);
-      // Resume pending action after redirect login
-      const pending=localStorage.getItem('od-pending');
-      localStorage.removeItem('od-pending');
-      render();
-      if(pending==='save')setTimeout(()=>odSave(true),500);
-      else if(pending==='load')setTimeout(()=>odLoad(true),500);
-    }
-  }catch(e){console.warn('MSAL:',e);}
-  return _msalApp;
-}
-
-async function getODToken(pendingAction){
-  const app=await getMSAL();
-  const accounts=app.getAllAccounts();
-  const req={scopes:OD_SCOPES};
-  // Try silent first
-  if(accounts.length>0){
-    req.account=accounts[0];
-    try{const r=await app.acquireTokenSilent(req);return r.accessToken;}catch(e){}
-  }
-  // Need interactive login
-  if(IS_MOBILE){
-    // Mobile: use redirect (popups are blocked on Android Chrome)
-    if(pendingAction)localStorage.setItem('od-pending',pendingAction);
-    showToast('🔐 Redirecting to Microsoft login...');
-    await app.acquireTokenRedirect(req);
-    return null; // redirect happens, page reloads
-  } else {
-    // Desktop: use popup
-    try{
-      const r=await app.acquireTokenPopup(req);
-      localStorage.setItem('od-user',r.account.name||r.account.username);
-      render();return r.accessToken;
-    }catch(e){return null;}
-  }
-}
-
-function getODUser(){return localStorage.getItem('od-user')||'';}
-
-async function odSignOut(){
-  const app=await getMSAL();const accounts=app.getAllAccounts();
-  if(accounts.length>0)await app.logoutPopup({account:accounts[0]}).catch(()=>{
-    // Mobile fallback
-    app.logoutRedirect({account:accounts[0]});
-  });
-  localStorage.removeItem('od-user');render();showToast('Signed out');
-}
-
-async function odSave(hasToken=false){
-  const btn=document.getElementById('od-save-btn');
-  if(btn){btn.textContent='⏳';btn.disabled=true;}
-  try{
-    showToast('🔐 Connecting...');
-    const token=await getODToken('save');
-    if(!token){if(btn){btn.textContent='☁️';btn.disabled=false;}return;}// redirect happened
-    const data={version:3,exportDate:new Date().toISOString(),PRODUCTS,MD,SMD,SH_DATA,D,FA,FB};
-    showToast('☁️ Saving to OneDrive...');
-    const resp=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/IAT-Inventory/IAT-Inventory-Backup.json:/content',{
-      method:'PUT',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
-      body:JSON.stringify(data,null,2)
+    const r=await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token',{
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams({
+        client_id:OD_CLIENT_ID,grant_type:'authorization_code',
+        code,redirect_uri:OD_REDIRECT,code_verifier:localStorage.getItem('od-v')
+      }).toString()
     });
-    if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e.error?.message||'HTTP '+resp.status);}
-    showToast('✅ Saved to OneDrive/IAT-Inventory/');
-  }catch(e){alert('OneDrive error: '+e.message);}
-  if(btn){btn.textContent='☁️';btn.disabled=false;}
+    const t=await r.json();
+    if(!r.ok)throw new Error(t.error_description||t.error);
+    localStorage.setItem('od-at',t.access_token);
+    localStorage.setItem('od-ate',String(Date.now()+(t.expires_in||3600)*1000));
+    if(t.refresh_token)localStorage.setItem('od-rt',t.refresh_token);
+    localStorage.removeItem('od-v');localStorage.removeItem('od-s');
+    const action=localStorage.getItem('od-p')||'';localStorage.removeItem('od-p');
+    showToast('✅ Logged in!');
+    if(action==='save')setTimeout(()=>odSaveExec(t.access_token),300);
+    else if(action==='load')setTimeout(()=>odLoadExec(t.access_token),300);
+  }catch(e){alert('Login failed: '+e.message);}
 }
 
-async function odLoad(hasToken=false){
-  const btn=document.getElementById('od-load-btn');
-  if(btn){btn.textContent='⏳';btn.disabled=true;}
+async function odSaveClick(){
+  const t=odGetToken();
+  if(t)odSaveExec(t);else odLogin('save');
+}
+async function odLoadClick(){
+  const t=odGetToken();
+  if(t)odLoadExec(t);else odLogin('load');
+}
+
+async function odSaveExec(token){
+  showToast('☁️ Saving to OneDrive...');
   try{
-    showToast('🔐 Connecting...');
-    const token=await getODToken('load');
-    if(!token){if(btn){btn.textContent='📂';btn.disabled=false;}return;}
-    showToast('📂 Loading from OneDrive...');
-    const listResp=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/IAT-Inventory:/children',{headers:{'Authorization':'Bearer '+token}});
-    if(!listResp.ok){alert('No backup folder found.\nSave first!');return;}
-    const list=await listResp.json();
+    const resp=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/IAT-Inventory/IAT-Inventory-Backup.json:/content',{
+      method:'PUT',
+      headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+      body:getBackupData()
+    });
+    if(resp.status===401){localStorage.removeItem('od-at');odLogin('save');return;}
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    showToast('✅ Saved to OneDrive/IAT-Inventory/');
+  }catch(e){alert('Save error: '+e.message);}
+}
+
+async function odLoadExec(token){
+  showToast('📂 Loading from OneDrive...');
+  try{
+    const lr=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/IAT-Inventory:/children',{headers:{'Authorization':'Bearer '+token}});
+    if(lr.status===401){localStorage.removeItem('od-at');odLogin('load');return;}
+    if(!lr.ok){alert('No backup folder found. Save first!');return;}
+    const list=await lr.json();
     const files=(list.value||[]).filter(f=>f.name.endsWith('.json')).sort((a,b)=>new Date(b.lastModifiedDateTime)-new Date(a.lastModifiedDateTime));
     if(!files.length){alert('No backup files in OneDrive/IAT-Inventory/');return;}
-    const fileResp=await fetch('https://graph.microsoft.com/v1.0/me/drive/items/'+files[0].id+'/content',{headers:{'Authorization':'Bearer '+token}});
-    if(!fileResp.ok)throw new Error('HTTP '+fileResp.status);
-    const data=await fileResp.json();
+    const fr=await fetch('https://graph.microsoft.com/v1.0/me/drive/items/'+files[0].id+'/content',{headers:{'Authorization':'Bearer '+token}});
+    const data=await fr.json();
     if(!data.version||!data.D){alert('Invalid file');return;}
     if(!confirm('Restore from OneDrive?\nReplaces all current data.'))return;
     applyBackup(data);showToast('✅ Restored from OneDrive!');
-  }catch(e){alert('OneDrive load error: '+e.message);}
-  if(btn){btn.textContent='📂';btn.disabled=false;}
+  }catch(e){alert('Load error: '+e.message);}
 }
 
-// Called directly from button — no async before redirect (Android fix)
-function odSaveClick(){
-  if(!_msalApp){
-    showToast('⏳ Initializing...');
-    getMSAL().then(()=>odSaveClick()).catch(e=>alert('Init error: '+e.message));
-    return;
-  }
-  const accounts=_msalApp.getAllAccounts();
-  if(accounts.length===0&&IS_MOBILE){
-    localStorage.setItem('od-pending','save');
-    _msalApp.loginRedirect({scopes:OD_SCOPES}); // sync from click = no Permission denied
-    return;
-  }
-  odSave();
+function getBackupData(){
+  return JSON.stringify({version:3,exportDate:new Date().toISOString(),PRODUCTS,MD,SMD,SH_DATA,D,FA,FB},null,2);
 }
-function odLoadClick(){
-  if(!_msalApp){
-    getMSAL().then(()=>odLoadClick());
-    return;
-  }
-  const accounts=_msalApp.getAllAccounts();
-  if(accounts.length===0&&IS_MOBILE){
-    localStorage.setItem('od-pending','load');
-    _msalApp.loginRedirect({scopes:OD_SCOPES});
-    return;
-  }
-  odLoad();
-}
+function getODUser(){return'';}
 
-function applyBackup(data){
-  if(data.PRODUCTS){PRODUCTS=data.PRODUCTS;saveProducts();}
-  if(data.MD){MD=data.MD;saveMapping();}
-  if(data.SMD){SMD=data.SMD;saveStockMapping();}
-  if(data.SH_DATA){SH_DATA=data.SH_DATA;saveSH();}
-  if(data.D){D=data.D;save();}
-  FA=data.FA||[];FB=data.FB||[];
-  saveFormulas();recompute();render();
+async function odLoadFile(input){
+  const file=input.files[0];if(!file)return;input.value='';
+  const text=await file.text();
+  try{
+    const data=JSON.parse(text);
+    if(!data.version||!data.D){alert('Invalid backup file');return;}
+    if(!confirm('Restore from file?\nReplaces all current data.'))return;
+    applyBackup(data);showToast('✅ Restored!');
+  }catch{alert('Invalid JSON file');}
 }
 
 // Stores the file handle in IndexedDB so path is remembered
@@ -2248,8 +2225,7 @@ function importData(input){
 
 // ═══ BOOT ════════════════════════════════════════════
 loadProducts();loadMapping();loadStockMapping();loadSH();loadRP();load();loadFormulas();migrateCompact();
-// Init MSAL to handle redirect response on page load
-if(typeof msal!=='undefined')getMSAL().catch(()=>{});
+checkODCallback();
 render();
 </script>
 </body>

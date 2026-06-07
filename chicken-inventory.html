@@ -361,6 +361,12 @@ function renderCard(r,inf){
       </div>
     </div>
     ${exp?`<div style="padding:11px">
+      ${r.ctns&&Object.keys(r.ctns).length?`<div style="margin-bottom:10px;background:#E8F5E9;border-radius:8px;padding:8px 10px">
+        <div style="font-size:10px;font-weight:700;color:#2E7D32;margin-bottom:5px">🐔 Whole Chicken (CTN)</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px">
+          ${Object.entries(r.ctns).sort((a,b)=>a[0]-b[0]).map(([s,n])=>`<span style="background:#fff;border:1px solid #A5D6A7;border-radius:5px;padding:2px 7px;font-size:11px;font-weight:600">${s}g × ${n}</span>`).join('')}
+        </div>
+      </div>`:''}
       ${renderPT(expandItems(r.items),true,'')}
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px dashed #ECEFF1">
         <span style="font-size:10px;color:#78909C;align-self:center">Export:</span>
@@ -401,7 +407,16 @@ function renderForm(){
       </div>
     </div>
   </div>
-  <div class="card">${renderPT(r.items,false,S.search)}</div>`;
+  <div class="card">${renderPT(r.items,false,S.search)}</div>
+  ${S.tab==='receivables'?`<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <h3 style="margin:0;font-size:13px;color:#2E7D32">🐔 Whole Chicken (CTN)</h3>
+      <button class="btn" style="background:#2E7D32;color:#fff;font-size:11px;padding:3px 10px" onclick="addCTNSize()">+ Add Size</button>
+    </div>
+    <div id="ctn-edit-rows">
+      ${renderCTNEditRows()}
+    </div>
+  </div>`:''}`;
 }
 
 // ─── Product Table (compact 4-col) ───────────────
@@ -522,9 +537,10 @@ function renderReceiptCalc(){
     const pcsSel=`<select tabindex="-1" style="padding:2px 2px;border:1px solid #E0E0E0;border-radius:4px;font-size:10px;background:#fff;color:#546E7A;width:32px" onchange="RC.sizePcs[${s}]=parseInt(this.value);updRC()">${[10,8,6,4,2,1].map(p=>`<option value="${p}"${pcs===p?' selected':''}>${p}</option>`).join('')}</select>`;
     sizeHTML+=`<div style="display:flex;align-items:center;gap:3px;padding:3px 4px;border-radius:6px;background:${hv?'#E8F5E9':'transparent'};margin-bottom:2px">
       <span style="font-size:11px;color:#546E7A;font-weight:600;min-width:38px">${s}g</span>
-      <input type="tel" value="${cv}" placeholder="0" tabindex="${tidx++}"
+      <input class="fi" type="tel" value="${cv}" placeholder="0" tabindex="${tidx++}"
         style="width:48px;padding:4px 2px;border:1.5px solid ${hv?'#A5D6A7':'#E0E0E0'};border-radius:5px;text-align:center;font-size:13px;font-weight:700;background:#fff;outline:none"
-        oninput="RC.ctns[${s}]=this.value" onblur="updRC()" enterkeyhint="next">
+        oninput="RC.ctns[${s}]=this.value" onblur="updRC()" enterkeyhint="next"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();this.closest('div').querySelector('select')||this.parentElement.nextElementSibling?.querySelector('input')?.focus()}">
       ${pcsSel}
       <span style="font-size:9px;color:${hv?'#2E7D32':'#B0BEC5'};min-width:40px;text-align:right">${hv?kg.toFixed(1)+' kg':''}</span>
     </div>`;
@@ -596,7 +612,9 @@ function saveReceiptAsRec(){
     if(c.unit==='pcs')items[c.prod]={kg:'',pcs:v.toFixed(0)};
     else items[c.prod]={kg:v.toFixed(3),pcs:''};
   });
-  const r={id:gid(),date:RC.date,notes:'Receivables'+(RC.supplier?' — '+RC.supplier:''),items:compactItems(items)};
+  // Save non-empty CTN sizes
+  const ctns={};Object.entries(RC.ctns).forEach(([s,v])=>{if(parseFloat(v)>0)ctns[s]=parseFloat(v);});
+  const r={id:gid(),date:RC.date,notes:'Receivables'+(RC.supplier?' — '+RC.supplier:''),items:compactItems(items),ctns:Object.keys(ctns).length?ctns:undefined};
   D.receivables=[r,...D.receivables];save();
   RC={supplier:'',date:new Date().toISOString().split('T')[0],temp:'',ctns:{},sizePcs:{},largePcs:8,cuts:{}};
   S.view='list';render();showToast('✅ Receipt saved as Receivable!');
@@ -1368,8 +1386,53 @@ function saveRec(){
   if(i>=0)D[key][i]=r;else D[key]=[r,...D[key]];
   save();S.view='list';S.record=null;S.search='';render();
 }
+function renderCTNEditRows(){
+  const r=S.record;if(!r)return'';
+  const ctns=r.ctns||{};
+  const entries=Object.entries(ctns).sort((a,b)=>a[0]-b[0]);
+  if(!entries.length)return`<div style="font-size:11px;color:#90A4AE;text-align:center;padding:8px">No CTN data — tap "+ Add Size" to add</div>`;
+  return entries.map(([s,n])=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+    <select class="fi" style="width:90px;font-size:12px" onchange="updCTNSize('${s}',this.value,'size')">
+      ${REC_SIZES.map(sz=>`<option value="${sz}"${sz==s?' selected':''}>${sz}g</option>`).join('')}
+    </select>
+    <span style="font-size:11px;color:#546E7A">×</span>
+    <input class="fi" type="tel" value="${n}" placeholder="0" style="width:60px;font-size:13px;font-weight:700;text-align:center" oninput="updCTNSize('${s}','${s}','count',this.value)">
+    <span style="font-size:11px;color:#90A4AE">CTN</span>
+    <button onclick="delCTNSize('${s}')" style="border:none;background:none;color:#EF9A9A;font-size:14px;cursor:pointer;padding:2px 6px">×</button>
+  </div>`).join('');
+}
+
+function updCTNSize(oldSize,newVal,field,countVal){
+  if(!S.record.ctns)S.record.ctns={};
+  if(field==='size'){
+    const count=S.record.ctns[oldSize]||0;
+    delete S.record.ctns[oldSize];
+    S.record.ctns[newVal]=count;
+  } else {
+    S.record.ctns[oldSize]=parseFloat(countVal)||0;
+  }
+  const el=document.getElementById('ctn-edit-rows');
+  if(el)el.innerHTML=renderCTNEditRows();
+}
+
+function delCTNSize(s){
+  if(!S.record.ctns)return;
+  delete S.record.ctns[s];
+  const el=document.getElementById('ctn-edit-rows');
+  if(el)el.innerHTML=renderCTNEditRows();
+}
+
+function addCTNSize(){
+  if(!S.record.ctns)S.record.ctns={};
+  // Find a size not already used
+  const used=Object.keys(S.record.ctns).map(Number);
+  const free=REC_SIZES.find(s=>!used.includes(s))||REC_SIZES[0];
+  S.record.ctns[String(free)]=0;
+  const el=document.getElementById('ctn-edit-rows');
+  if(el)el.innerHTML=renderCTNEditRows();
+}
+
 function updItem(p,f,el){
-  if(!S.record)return;const v=el.value;
   if(!S.record.items[p])S.record.items[p]={kg:'',pcs:''};
   S.record.items[p][f]=v;
   el.style.borderColor=(parseFloat(v)||0)>0?(f==='pcs'?'#CE93D8':'#81C784'):'#E0E0E0';

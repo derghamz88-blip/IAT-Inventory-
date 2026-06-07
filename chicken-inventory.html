@@ -385,6 +385,14 @@ function renderForm(){
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:11px;flex-wrap:wrap;gap:6px">
       <h2 style="margin:0;font-size:14px;color:${inf.color}">${inf.emoji} New ${inf.ar}</h2>
       <div style="display:flex;gap:5px">
+        ${['inventory','returns','waste'].includes(S.tab)?`
+        <label title="Scan image with AI" style="padding:6px 10px;background:#7B1FA2;border-radius:7px;color:#fff;cursor:pointer;font-size:13px">
+          📷<input type="file" accept="image/*" onchange="scanFormAI(this)" style="display:none">
+        </label>
+        <label title="Gallery" style="padding:6px 10px;background:#1565C0;border-radius:7px;color:#fff;cursor:pointer;font-size:13px">
+          🖼️<input type="file" accept="image/*" onchange="scanFormAI(this)" style="display:none">
+        </label>
+        <button title="Paste text" style="padding:6px 10px;background:#00796B;border:none;border-radius:7px;color:#fff;cursor:pointer;font-size:13px" onclick="showTextScan()">📝</button>`:''}
         <button class="btn" style="background:#ECEFF1;color:#546E7A" onclick="cancelForm()">← Back</button>
         <button class="btn" style="background:${inf.color};color:#fff;padding:7px 15px" onclick="saveRec()">💾 Save</button>
       </div>
@@ -620,7 +628,192 @@ function saveReceiptAsRec(){
   S.view='list';render();showToast('✅ Receipt saved as Receivable!');
 }
 
-// ─── AI Receipt Scanner ───────────────────────────
+// ─── Smart Local Text Parser (no AI needed) ──────
+function findProductKey(name,is500){
+  const n=name.toLowerCase().trim();
+  for(const p of PRODUCTS){
+    if(p.toLowerCase()===n)return p;
+    if(is500&&p.toLowerCase()===n+' 500')return p;
+  }
+  for(const p of PRODUCTS){
+    const base=p.replace(/ 500$/,'').toLowerCase();
+    if(n===base||base.startsWith(n)||n.startsWith(base)){
+      if(is500&&p.endsWith(' 500'))return p;
+      if(!is500&&!p.endsWith(' 500'))return p;
+    }
+  }
+  return null;
+}
+
+function parseInventoryText(text){
+  const result={};
+  const lines=text.split('\n').map(l=>l.trim()).filter(l=>l);
+  let driverCandidate=null;
+  for(const line of lines){
+    if(/IAT Trading|WhatsApp/i.test(line))continue;
+    const dm=line.match(/(\d{1,2})\s*[\/\-\.]\s*(\d{1,2})\s*[\/\-\.]\s*(\d{2,4})/);
+    if(dm){
+      let[,d,m,y]=dm;if(y.length===2)y='20'+y;
+      result._date=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+      continue;
+    }
+    const pm=line.match(/^([a-zA-Z\u0600-\u06FF\s]+?)\s+(\d+(?:\.\d+)?)\s*(pcs?|trays?|treys?|kg|\u0643\u063a|\u0637\u0628\u0642|\u0623\u0637\u0628\u0627\u0642)?$/i);
+    if(pm){
+      const[,name,qty,unit]=pm;
+      const q=parseFloat(qty);
+      const u=(unit||'').toLowerCase();
+      const is500=/pcs?|trays?|treys?/.test(u);
+      const key=findProductKey(name.trim(),is500);
+      if(key){result[key]=is500?{pcs:q}:{kg:q};continue;}
+    }
+    if(!driverCandidate&&/^[a-zA-Z\u0600-\u06FF\s]{2,30}$/.test(line)&&!/return|inventory|waste|receivable/i.test(line)){
+      driverCandidate=line.trim();
+    }
+  }
+  if(driverCandidate)result._driver=driverCandidate;
+  return result;
+}
+
+function showTextScan(){
+  const existing=document.getElementById('text-scan-modal');
+  if(existing){existing.remove();return;}
+  const m=document.createElement('div');
+  m.id='text-scan-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:flex-end';
+  m.innerHTML='<div style="background:#fff;width:100%;border-radius:16px 16px 0 0;padding:18px;max-height:80vh;overflow-y:auto">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+    +'<h3 style="margin:0;font-size:15px;color:#00796B">\u{1F4DD} Paste Text</h3>'
+    +'<button onclick="document.getElementById(\'text-scan-modal\').remove()" style="border:none;background:none;font-size:20px;cursor:pointer;color:#90A4AE">\u00D7</button>'
+    +'</div>'
+    +'<div style="font-size:10px;color:#90A4AE;margin-bottom:8px">\u0627\u0646\u0633\u062e \u0645\u0646 \u0648\u0627\u062a\u0633\u0627\u0628 \u0648\u0627\u0644\u0635\u0642 \u0647\u0646\u0627 \u2014 \u062a\u062d\u0644\u064a\u0644 \u0645\u062d\u0644\u064a \u0641\u0648\u0631\u064a \u0628\u062f\u0648\u0646 AI</div>'
+    +'<textarea id="text-scan-input" placeholder="Return 1/6/2026\nAhmed\nThigh 34 pcs\nWings 9 pcs\nBone 216 kg" style="width:100%;height:150px;border:1.5px solid #B2DFDB;border-radius:10px;padding:10px;font-size:13px;resize:none;box-sizing:border-box;font-family:inherit"></textarea>'
+    +'<div style="display:flex;gap:8px;margin-top:10px">'
+    +'<button onclick="document.getElementById(\'text-scan-modal\').remove()" style="flex:1;padding:11px;border:1px solid #ECEFF1;background:#fff;border-radius:10px;font-size:13px;cursor:pointer;color:#546E7A">Cancel</button>'
+    +'<button onclick="runTextScan()" style="flex:2;padding:11px;background:#00796B;border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">\u26A1 Parse</button>'
+    +'</div></div>';
+  document.body.appendChild(m);
+  setTimeout(()=>document.getElementById('text-scan-input')?.focus(),100);
+}
+
+function runTextScan(){
+  const txt=document.getElementById('text-scan-input')?.value?.trim();
+  if(!txt){alert('\u0627\u0644\u0635\u0642 \u0627\u0644\u0646\u0635 \u0623\u0648\u0644\u0627\u064b');return;}
+  document.getElementById('text-scan-modal').remove();
+  const result=parseInventoryText(txt);
+  let filled=0;
+  if(result._date&&S.record){S.record.date=result._date;filled++;}
+  if(result._driver&&S.record){
+    const base=S.record.notes||'';
+    S.record.notes=base.replace(/\s*—.*$/,'').trim()+' \u2014 '+result._driver;
+    filled++;
+  }
+  Object.entries(result).forEach(([prod,vals])=>{
+    if(prod.startsWith('_'))return;
+    if(!S.record?.items)return;
+    const key=PRODUCTS.find(p=>p===prod);
+    if(!key)return;
+    if(!S.record.items[key])S.record.items[key]={kg:'',pcs:''};
+    if(vals.kg>0){S.record.items[key].kg=String(vals.kg);filled++;}
+    if(vals.pcs>0){S.record.items[key].pcs=String(vals.pcs);filled++;}
+  });
+  render();
+  filled>1?showToast('\u2705 Parsed '+filled+' values!'):alert('\u26A0\uFE0F \u0645\u0627 \u0642\u062F\u0631 \u064A\u062A\u0639\u0631\u0641 \u0639\u0644\u0649 \u0645\u0646\u062A\u062C\u0627\u062A\n\u062A\u0623\u0643\u062F \u0645\u0646 \u0627\u0644\u0635\u064A\u0627\u063A\u0629:\n"Thigh 34 pcs" \u0623\u0648 "Bone 216 kg"');
+}
+
+async function scanFormAI(input){
+  const file=input.files[0];if(!file)return;input.value='';
+  const prov=getAIProv();const apiKey=getActiveKey();
+  if(!apiKey){
+    const src=prov==='groq'?'console.groq.com':prov==='gemini'?'aistudio.google.com':'console.anthropic.com';
+    alert('❌ API Key مش موجود!\nروح: Settings → 🔑 API Key\nو احصل على مفتاح مجاني من:\n'+src);
+    return;
+  }
+  showToast('🔍 Scanning with AI...');
+  try{
+    const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
+    const products=PRODUCTS.join(', ');
+    const prod500=PRODUCTS.filter(p=>p.endsWith(' 500')).map(p=>p.replace(' 500',''));
+    const prompt=`You are analyzing a chicken product inventory image. Extract ALL products, quantities, AND date if visible.
+
+MAPPING RULES (very important):
+- If image shows "ProductName X pcs" OR "ProductName X trays" OR "ProductName X trey" → that product is in 500g packs → output: "ProductName 500": {"pcs": X}
+- If image shows "ProductName X kg" → output: "ProductName": {"kg": X}
+- "tray", "trays", "trey" always means 500g pack = use pcs
+- Products that have 500g versions: ${prod500.join(', ')}
+- If you see a date (like "1/6/2026" or "June 1") → include "_date": "YYYY-MM-DD"
+
+Examples:
+- "Thigh 34 pcs" → "Thigh 500": {"pcs": 34}
+- "Wings 9 pcs" → "Wings 500": {"pcs": 9}
+- "Liver 20 pcs" → "Liver 500": {"pcs": 20}
+- "Bone 216 kg" → "Bone": {"kg": 216}
+- "Breast 25 trays" → "Breast 500": {"pcs": 25}
+- "Return 1/6/2026" → "_date": "2026-06-01"
+
+Return ONLY valid JSON, no markdown:
+{"_date":"2026-06-01","Thigh 500":{"pcs":34},"Wings 500":{"pcs":9},"Bone":{"kg":216}}
+
+Analyze the image now:`;
+    let result;
+    if(prov==='gemini'){
+      const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({contents:[{parts:[{inline_data:{mime_type:file.type,data:b64}},{text:prompt}]}]})
+      });
+      if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e.error?.message||'HTTP '+resp.status);}
+      const d=await resp.json();
+      result=extractJSON(d.candidates[0].content.parts[0].text);
+    } else if(prov==='groq'){
+      const resp=await fetch('https://api.groq.com/openai/v1/chat/completions',{
+        method:'POST',headers:{'Authorization':'Bearer '+apiKey,'Content-Type':'application/json'},
+        body:JSON.stringify({model:'meta-llama/llama-4-scout-17b-16e-instruct',messages:[{role:'user',content:[{type:'image_url',image_url:{url:'data:'+file.type+';base64,'+b64}},{type:'text',text:prompt}]}],max_tokens:2000})
+      });
+      if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e.error?.message||'HTTP '+resp.status);}
+      const d=await resp.json();
+      result=extractJSON(d.choices[0].message.content);
+    } else {
+      const resp=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:2000,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:file.type,data:b64}},{type:'text',text:prompt}]}]})
+      });
+      if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e.error?.message||'HTTP '+resp.status);}
+      const d=await resp.json();
+      result=extractJSON(d.content.map(x=>x.text||'').join(''));
+    }
+    // Fill form fields
+    let filledCount=0;
+    if(result._date&&S.record){S.record.date=result._date;filledCount++;}
+    Object.entries(result).forEach(([prod,vals])=>{
+      if(prod==='_date')return;
+      if(!S.record||!S.record.items)return;
+      // Try exact match first, then case-insensitive
+      let key=PRODUCTS.find(p=>p===prod)||PRODUCTS.find(p=>p.toLowerCase()===prod.toLowerCase());
+      if(!key)return;
+      if(!S.record.items[key])S.record.items[key]={kg:'',pcs:''};
+      if(vals.kg&&parseFloat(vals.kg)>0){S.record.items[key].kg=String(vals.kg);filledCount++;}
+      if(vals.pcs&&parseFloat(vals.pcs)>0){S.record.items[key].pcs=String(vals.pcs);filledCount++;}
+    });
+    render();
+    if(filledCount>0){showToast('✅ Scanned '+filledCount+' values! Please verify.');}
+    else{alert('⚠️ AI scanned the image but found no matching products.\n\nMake sure the image shows product names and quantities clearly.');}
+  }catch(e){
+    if(e.message.includes('quota')||e.message.includes('429')||e.message.includes('exceeded')){
+      alert('⚠️ تجاوزت الحد المجاني — انتظر دقيقة وحاول ثاني');
+    } else if(e.message.includes('401')||e.message.includes('auth')){
+      alert('❌ API Key غلط — تحقق من Settings → 🔑 API Key');
+    } else {
+      alert('Scan error: '+e.message);
+    }
+  }
+}
+function extractJSON(text){
+  const c=text.replace(/```json|```/g,'').trim();
+  try{return JSON.parse(c);}catch(e){}
+  const s=c.indexOf('{'),en=c.lastIndexOf('}');
+  if(s>=0&&en>s)try{return JSON.parse(c.slice(s,en+1));}catch(ex){}
+  throw new Error('Invalid JSON: '+c.substring(0,100));
+}
 const SK_API='chk-api-key';
 const SK_GEMINI='chk-gemini-key';
 const SK_AI_PROV='chk-ai-prov';
@@ -656,7 +849,7 @@ async function scanReceiptAI(input){
     const b64=await new Promise((res,rej)=>{
       const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);
     });
-    const prompt='Analyze this Fresh Chicken Receipt Report image. Return ONLY a JSON object with no markdown:\n{"supplier":"name or null","date":"YYYY-MM-DD or null","ctns":{"1300":32,"1350":17},"cuts":{"breast":0,"legs":0,"drum":0,"thigh":0,"thighbl":0,"wings":0,"liver":0,"gizzard":0,"heart":0,"bone":0}}\nOnly include sizes that have actual numbers. cuts in KG. Omit zero values.';
+    const prompt='Analyze this Fresh Chicken Receipt Report image. Return ONLY a JSON object with no markdown:\n{"supplier":"name or null","date":"YYYY-MM-DD or null","ctns":{"1300":32,"1350":17},"cuts":{"breast":0,"legs":0,"drum":0,"thigh":0,"thighbl":0,"wings":0,"liver":0,"gizzard":0,"heart":0,"bone":0}}\nNOTE: "tray"/"trey" = 500g pack. cuts values are in KG. Only include sizes/cuts with actual numbers. Omit zero values.';
     let result;
     if(prov==='gemini'){
       const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,{
@@ -665,8 +858,7 @@ async function scanReceiptAI(input){
       });
       if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e.error?.message||'HTTP '+resp.status);}
       const d=await resp.json();
-      const txt=d.candidates[0].content.parts[0].text.replace(/```json|```/g,'').trim();
-      result=JSON.parse(txt);
+      result=extractJSON(d.candidates[0].content.parts[0].text);
     } else if(prov==='groq'){
       const resp=await fetch('https://api.groq.com/openai/v1/chat/completions',{
         method:'POST',
@@ -677,23 +869,21 @@ async function scanReceiptAI(input){
             {type:'image_url',image_url:{url:'data:'+file.type+';base64,'+b64}},
             {type:'text',text:prompt}
           ]}],
-          max_tokens:1000
+          max_tokens:2000
         })
       });
       if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e.error?.message||'HTTP '+resp.status);}
       const d=await resp.json();
-      const txt=d.choices[0].message.content.replace(/```json|```/g,'').trim();
-      result=JSON.parse(txt);
+      result=extractJSON(d.choices[0].message.content);
     } else {
       const resp=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:1000,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:file.type,data:b64}},{type:'text',text:prompt}]}]})
+        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:2000,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:file.type,data:b64}},{type:'text',text:prompt}]}]})
       });
       if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e.error?.message||'HTTP '+resp.status);}
       const d=await resp.json();
-      const txt=d.content.map(x=>x.text||'').join('').replace(/```json|```/g,'').trim();
-      result=JSON.parse(txt);
+      result=extractJSON(d.content.map(x=>x.text||'').join(''));
     }
     if(result.supplier)RC.supplier=result.supplier;
     if(result.date)RC.date=result.date;

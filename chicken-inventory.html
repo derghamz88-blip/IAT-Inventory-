@@ -610,13 +610,22 @@ function getAPIKey(){return localStorage.getItem(SK_API)||'';}
 function saveAPIKey(k){localStorage.setItem(SK_API,k.trim());}
 function getGeminiKey(){return localStorage.getItem(SK_GEMINI)||'';}
 function saveGeminiKey(k){localStorage.setItem(SK_GEMINI,k.trim());}
+function getGroqKey(){return localStorage.getItem('chk-groq-key')||'';}
+function saveGroqKey(k){localStorage.setItem('chk-groq-key',k.trim());}
 function getAIProv(){return localStorage.getItem(SK_AI_PROV)||'gemini';}
 function saveAIProv(p){localStorage.setItem(SK_AI_PROV,p);}
+
+function getActiveKey(){
+  const p=getAIProv();
+  if(p==='gemini')return getGeminiKey();
+  if(p==='groq')return getGroqKey();
+  return getAPIKey();
+}
 
 async function scanReceiptAI(input){
   const file=input.files[0];if(!file)return;input.value='';
   const prov=getAIProv();
-  const apiKey=prov==='gemini'?getGeminiKey():getAPIKey();
+  const apiKey=getActiveKey();
   if(!apiKey){
     const where=prov==='gemini'
       ?'aistudio.google.com → Get API Key (مجاني)'
@@ -632,13 +641,30 @@ async function scanReceiptAI(input){
     const prompt='Analyze this Fresh Chicken Receipt Report image. Return ONLY a JSON object with no markdown:\n{"supplier":"name or null","date":"YYYY-MM-DD or null","ctns":{"1300":32,"1350":17},"cuts":{"breast":0,"legs":0,"drum":0,"thigh":0,"thighbl":0,"wings":0,"liver":0,"gizzard":0,"heart":0,"bone":0}}\nOnly include sizes that have actual numbers. cuts in KG. Omit zero values.';
     let result;
     if(prov==='gemini'){
-      const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${apiKey}`,{
+      const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({contents:[{parts:[{inline_data:{mime_type:file.type,data:b64}},{text:prompt}]}]})
       });
       if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e.error?.message||'HTTP '+resp.status);}
       const d=await resp.json();
       const txt=d.candidates[0].content.parts[0].text.replace(/```json|```/g,'').trim();
+      result=JSON.parse(txt);
+    } else if(prov==='groq'){
+      const resp=await fetch('https://api.groq.com/openai/v1/chat/completions',{
+        method:'POST',
+        headers:{'Authorization':'Bearer '+apiKey,'Content-Type':'application/json'},
+        body:JSON.stringify({
+          model:'meta-llama/llama-4-scout-17b-16e-instruct',
+          messages:[{role:'user',content:[
+            {type:'image_url',image_url:{url:'data:'+file.type+';base64,'+b64}},
+            {type:'text',text:prompt}
+          ]}],
+          max_tokens:1000
+        })
+      });
+      if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e.error?.message||'HTTP '+resp.status);}
+      const d=await resp.json();
+      const txt=d.choices[0].message.content.replace(/```json|```/g,'').trim();
       result=JSON.parse(txt);
     } else {
       const resp=await fetch('https://api.anthropic.com/v1/messages',{
@@ -670,55 +696,41 @@ async function scanReceiptAI(input){
 // ─── Settings: API Key ────────────────────────────
 function renderSettingsAPI(){
   const prov=getAIProv();
-  const gKey=getGeminiKey();const aKey=getAPIKey();
+  const gKey=getGeminiKey();const aKey=getAPIKey();const grKey=getGroqKey();
+  const btn=(p,emoji,label,sub,color,active)=>`<button class="btn" style="flex:1;padding:10px 6px;background:${active?color:'#ECEFF1'};color:${active?'#fff':'#546E7A'};border-radius:10px;font-size:12px" onclick="saveAIProv('${p}');render()">
+    <div style="font-size:18px;margin-bottom:3px">${emoji}</div>
+    <div style="font-weight:700">${label}</div>
+    <div style="font-size:9px;opacity:.8">${sub}</div>
+  </button>`;
+  const keyBox=(id,val,color,onSave)=>`<div style="display:flex;gap:6px;margin-top:8px">
+    <input id="${id}" class="fi" type="password" value="${val}" style="flex:1;font-size:12px;font-family:monospace">
+    <button class="btn" style="background:${color};color:#fff;font-size:12px" onclick="${onSave}">Save</button>
+  </div>`;
   return`<div class="card">
-    <h3 style="margin:0 0 12px;font-size:14px;color:#455A64">🔑 AI Provider for Receipt Scanning</h3>
-    <!-- Provider choice -->
-    <div style="display:flex;gap:8px;margin-bottom:14px">
-      <button class="btn" style="flex:1;padding:12px;background:${prov==='gemini'?'#1565C0':'#ECEFF1'};color:${prov==='gemini'?'#fff':'#546E7A'};border-radius:10px;font-size:13px" onclick="saveAIProv('gemini');render()">
-        <div style="font-size:20px;margin-bottom:4px">🆓</div>
-        <div style="font-weight:700">Google Gemini</div>
-        <div style="font-size:10px;opacity:.8">Free — No credit card</div>
-      </button>
-      <button class="btn" style="flex:1;padding:12px;background:${prov==='anthropic'?'#6A1B9A':'#ECEFF1'};color:${prov==='anthropic'?'#fff':'#546E7A'};border-radius:10px;font-size:13px" onclick="saveAIProv('anthropic');render()">
-        <div style="font-size:20px;margin-bottom:4px">🤖</div>
-        <div style="font-weight:700">Anthropic Claude</div>
-        <div style="font-size:10px;opacity:.8">Paid — Higher accuracy</div>
-      </button>
+    <h3 style="margin:0 0 12px;font-size:14px;color:#455A64">🔑 AI Provider</h3>
+    <div style="display:flex;gap:6px;margin-bottom:12px">
+      ${btn('gemini','🆓','Gemini','مجاني','#1565C0',prov==='gemini')}
+      ${btn('groq','⚡','Groq','مجاني+سريع','#FF6B00',prov==='groq')}
+      ${btn('anthropic','🤖','Claude','مدفوع','#6A1B9A',prov==='anthropic')}
     </div>
-    <!-- Gemini key -->
-    <div style="background:${prov==='gemini'?'#E3F2FD':'#F5F5F5'};padding:12px;border-radius:10px;margin-bottom:10px;border:${prov==='gemini'?'2px solid #1565C0':'1px solid #E0E0E0'}">
-      <div style="font-size:12px;font-weight:700;color:#1565C0;margin-bottom:6px">Google Gemini API Key ${prov==='gemini'?'← Active':''}</div>
-      <div style="font-size:11px;color:#546E7A;margin-bottom:8px">
-        1. روح: <b>aistudio.google.com</b><br>
-        2. اضغط <b>Get API Key</b> → Create API Key<br>
-        3. انسخ الـ key والصقه هنا
-      </div>
-      <div style="display:flex;gap:6px">
-        <input id="gemini-key-inp" class="fi" type="password" placeholder="AIzaSy..." value="${gKey}" style="flex:1;font-size:12px;font-family:monospace">
-        <button class="btn" style="background:#1565C0;color:#fff;font-size:12px" onclick="saveGeminiKey(document.getElementById('gemini-key-inp').value);showToast('✅ Gemini key saved!')">Save</button>
-      </div>
-      ${gKey?`<div style="margin-top:6px;font-size:10px;color:#2E7D32">✅ Key configured (${gKey.length} chars)</div>`:'<div style="margin-top:6px;font-size:10px;color:#C62828">⚠️ No key yet</div>'}
-    </div>
-    <!-- Anthropic key -->
-    <div style="background:${prov==='anthropic'?'#F3E5F5':'#F5F5F5'};padding:12px;border-radius:10px;border:${prov==='anthropic'?'2px solid #6A1B9A':'1px solid #E0E0E0'}">
-      <div style="font-size:12px;font-weight:700;color:#6A1B9A;margin-bottom:6px">Anthropic API Key ${prov==='anthropic'?'← Active':''}</div>
-      <div style="font-size:11px;color:#546E7A;margin-bottom:8px">
-        1. روح: <b>console.anthropic.com</b><br>
-        2. Settings → API Keys → Create Key<br>
-        3. انسخ الـ key والصقه هنا (مدفوع)
-      </div>
-      <div style="display:flex;gap:6px">
-        <input id="anth-key-inp" class="fi" type="password" placeholder="sk-ant-..." value="${aKey}" style="flex:1;font-size:12px;font-family:monospace">
-        <button class="btn" style="background:#6A1B9A;color:#fff;font-size:12px" onclick="saveAPIKey(document.getElementById('anth-key-inp').value);showToast('✅ Anthropic key saved!')">Save</button>
-      </div>
-      ${aKey?`<div style="margin-top:6px;font-size:10px;color:#2E7D32">✅ Key configured (${aKey.length} chars)</div>`:'<div style="margin-top:6px;font-size:10px;color:#78909C">No key</div>'}
-    </div>
+    ${prov==='gemini'?`<div style="background:#E3F2FD;padding:10px;border-radius:10px;border:2px solid #1565C0">
+      <b style="font-size:11px;color:#1565C0">Google Gemini ← Active</b><br>
+      <span style="font-size:10px;color:#546E7A">aistudio.google.com → Get API Key</span>
+      ${keyBox('gk-inp',gKey,'#1565C0',"saveGeminiKey(document.getElementById('gk-inp').value);showToast('✅ Saved!')")}
+    </div>`:''}
+    ${prov==='groq'?`<div style="background:#FFF3E0;padding:10px;border-radius:10px;border:2px solid #FF6B00">
+      <b style="font-size:11px;color:#FF6B00">⚡ Groq ← Active</b><br>
+      <span style="font-size:10px;color:#546E7A">console.groq.com → API Keys → Create</span>
+      ${keyBox('grk-inp',grKey,'#FF6B00',"saveGroqKey(document.getElementById('grk-inp').value);showToast('✅ Saved!')")}
+    </div>`:''}
+    ${prov==='anthropic'?`<div style="background:#F3E5F5;padding:10px;border-radius:10px;border:2px solid #6A1B9A">
+      <b style="font-size:11px;color:#6A1B9A">Claude ← Active</b><br>
+      <span style="font-size:10px;color:#546E7A">console.anthropic.com → API Keys</span>
+      ${keyBox('ak-inp',aKey,'#6A1B9A',"saveAPIKey(document.getElementById('ak-inp').value);showToast('✅ Saved!')")}
+    </div>`:''}
   </div>`;
 }
 
-// ─── Carton Weight Verification (Multi-row) ──────
-let CWC_ROWS=[{id:1,sh:'',ctns:'',gross:'',cwt:''}];let CWC_ID=1;
 function showCartonCalc(){
   const ex=document.getElementById('cwc-modal');if(ex){ex.remove();return;}
   CWC_ROWS=[{id:1,sh:'',ctns:'',gross:'',cwt:''}];CWC_ID=1;
@@ -768,7 +780,7 @@ function renderCWCRows(){
         <div style="flex:1"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">No. of CTN</div>
           <input class="fi" type="tel" tabindex="${t1}" placeholder="0" value="${row.ctns}" enterkeyhint="next" style="width:100%;font-size:12px" oninput="setCWCVal(${row.id},'ctns',this.value)" onblur="renderCWCRows()"></div>
         <div style="flex:1"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Gross Weight (KG)</div>
-          <input class="fi" type="tel" tabindex="${t2}" placeholder="0.00" value="${row.gross}" enterkeyhint="next" style="width:100%;font-size:12px" oninput="setCWCVal(${row.id},'gross',this.value)" onblur="renderCWCRows()"></div>
+          <input class="fi" type="tel" tabindex="${t2}" placeholder="0.00" value="${row.gross}" enterkeyhint="next" style="width:100%;font-size:12px" oninput="setCWCVal(${row.id},'gross',this.value)" onblur="renderCWCRows()" onkeydown="if(event.key==='Enter'){event.preventDefault();addCWCRowFocus();}"></div>
       </div>
       ${r.net>0?`<div style="margin-top:6px;display:flex;justify-content:space-between;background:#F5F5F5;padding:5px 9px;border-radius:7px">
         <span style="font-size:10px;color:#546E7A">Empty: ${r.empty.toFixed(3)} KG</span>
@@ -795,6 +807,38 @@ function updCWCRow(id,f,v){const r=CWC_ROWS.find(x=>x.id===id);if(r){r[f]=v;rend
 function setCWCVal(id,f,v){const r=CWC_ROWS.find(x=>x.id===id);if(r)r[f]=v;}
 function updCWC(){updCWCTotal();}
 function addCWCRow(){CWC_ID++;CWC_ROWS.push({id:CWC_ID,sh:'',ctns:'',gross:'',cwt:''});renderCWCRows();}
+function removeCWCRow(id){CWC_ROWS=CWC_ROWS.filter(r=>r.id!==id);renderCWCRows();}
+
+function addCWCRowFocus(){
+  // Save current input values before appending
+  document.querySelectorAll('#cwc-rows input[type="tel"]:not([tabindex="-1"])').forEach(inp=>{
+    const m=inp.id&&inp.id.match(/cwc-(ctn|gross)-(\d+)/);
+    if(m){const row=CWC_ROWS.find(r=>r.id==m[2]);if(row)row[m[1]==='ctn'?'ctns':'gross']=inp.value;}
+  });
+  CWC_ID++;
+  const id=CWC_ID;
+  CWC_ROWS.push({id,sh:'',ctns:'',gross:'',cwt:''});
+  const i=CWC_ROWS.length;
+  const t1=100+(i-1)*2;const t2=t1+1;
+  const shOpts=['<option value="">— Select —</option>',...SH_DATA.map(s=>`<option value="${s.name}">${s.name} (${s.wt})</option>`),'<option value="custom">Custom...</option>'].join('');
+  const div=document.createElement('div');
+  div.style.cssText='border:1px solid #ECEFF1;border-radius:10px;padding:10px;margin-bottom:8px;background:#FAFAFA';
+  div.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+    <span style="font-size:11px;font-weight:700;color:#E65100">Batch ${i}</span>
+    <button onclick="removeCWCRow(${id})" style="border:none;background:none;font-size:14px;cursor:pointer;color:#EF9A9A;padding:2px 5px">× remove</button>
+  </div>
+  <div style="margin-bottom:6px"><select tabindex="-1" class="fi" style="width:100%;font-size:11px" onchange="updCWCRow(${id},'sh',this.value)">${shOpts}</select></div>
+  <div style="display:flex;gap:6px">
+    <div style="flex:1"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">No. of CTN</div>
+      <input class="fi" type="tel" id="cwc-ctn-${id}" tabindex="${t1}" placeholder="0" enterkeyhint="next" style="width:100%;font-size:12px" oninput="setCWCVal(${id},'ctns',this.value)" onblur="renderCWCRows()"></div>
+    <div style="flex:1"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Gross Weight (KG)</div>
+      <input class="fi" type="tel" id="cwc-gross-${id}" tabindex="${t2}" placeholder="0.00" enterkeyhint="next" style="width:100%;font-size:12px" oninput="setCWCVal(${id},'gross',this.value)" onblur="renderCWCRows()" onkeydown="if(event.key==='Enter'){event.preventDefault();addCWCRowFocus();}"></div>
+  </div>`;
+  document.getElementById('cwc-rows').appendChild(div);
+  // Focus immediately — no timeout = keyboard stays open
+  document.getElementById('cwc-ctn-'+id).focus();
+  updCWCTotal();
+}
 function removeCWCRow(id){CWC_ROWS=CWC_ROWS.filter(r=>r.id!==id);renderCWCRows();}
 
 
@@ -2005,7 +2049,7 @@ async function odLogin(action){
     state:s,code_challenge:ch,code_challenge_method:'S256',
     response_mode:'fragment' // SPA apps return code in hash (#code=...)
   });
-  window.location.href='https://login.microsoftonline.com/common/oauth2/v2.0/authorize?'+p;
+  window.location.href='https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?'+p;
 }
 
 async function checkODCallback(){
@@ -2031,7 +2075,7 @@ async function checkODCallback(){
 
   showToast('🔐 Getting access token...');
   try{
-    const r=await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token',{
+    const r=await fetch('https://login.microsoftonline.com/consumers/oauth2/v2.0/token',{
       method:'POST',
       headers:{'Content-Type':'application/x-www-form-urlencoded'},
       body:new URLSearchParams({

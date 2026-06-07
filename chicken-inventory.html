@@ -750,22 +750,25 @@ function calcCWCRow(row){
 }
 function renderCWCRows(){
   const c=document.getElementById('cwc-rows');if(!c)return;
-  const shOpts=(sel)=>['<option value="">— Select —</option>',...SH_DATA.map(s=>`<option value="${s.name}"${sel===s.name?' selected':''}>${s.name} (${s.wt})</option>`),'<option value="custom"'+( sel==='custom'?' selected':'')+'>Custom...</option>'].join('');
+  const shOpts=(sel)=>['<option value="">— Select —</option>',...SH_DATA.map(s=>`<option value="${s.name}"${sel===s.name?' selected':''}>${s.name} (${s.wt})</option>`),'<option value="custom"'+(sel==='custom'?' selected':'')+'>Custom...</option>'].join('');
+  let tidx=100;
   c.innerHTML=CWC_ROWS.map((row,i)=>{
     const r=calcCWCRow(row);
+    const t1=tidx++;const t2=tidx++;
     return`<div style="border:1px solid #ECEFF1;border-radius:10px;padding:10px;margin-bottom:8px;background:#FAFAFA">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
         <span style="font-size:11px;font-weight:700;color:#E65100">Batch ${i+1}</span>
         ${CWC_ROWS.length>1?`<button onclick="removeCWCRow(${row.id})" style="border:none;background:none;font-size:14px;cursor:pointer;color:#EF9A9A;padding:2px 5px">× remove</button>`:''}
       </div>
       <div style="margin-bottom:6px">
-        <select class="fi" style="width:100%;font-size:11px" onchange="updCWCRow(${row.id},'sh',this.value)">${shOpts(row.sh)}</select>
+        <select tabindex="-1" class="fi" style="width:100%;font-size:11px" onchange="updCWCRow(${row.id},'sh',this.value)">${shOpts(row.sh)}</select>
       </div>
-      ${row.sh==='custom'?`<div style="margin-bottom:6px"><input class="fi" type="tel" step="0.001" placeholder="Empty CTN weight KG" value="${row.cwt||''}" style="width:100%;font-size:11px" oninput="setCWCVal(${row.id},'cwt',this.value)" onblur="renderCWCRows()"></div>`:''}            <div style="display:flex;gap:6px">
+      ${row.sh==='custom'?`<div style="margin-bottom:6px"><input class="fi" type="tel" tabindex="-1" placeholder="Empty CTN weight KG" value="${row.cwt||''}" style="width:100%;font-size:11px" oninput="setCWCVal(${row.id},'cwt',this.value)" onblur="renderCWCRows()"></div>`:''}
+      <div style="display:flex;gap:6px">
         <div style="flex:1"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">No. of CTN</div>
-          <input class="fi" type="tel" placeholder="0" value="${row.ctns}" style="width:100%;font-size:12px" oninput="setCWCVal(${row.id},'ctns',this.value)" onblur="renderCWCRows()"></div>
+          <input class="fi" type="tel" tabindex="${t1}" placeholder="0" value="${row.ctns}" enterkeyhint="next" style="width:100%;font-size:12px" oninput="setCWCVal(${row.id},'ctns',this.value)" onblur="renderCWCRows()"></div>
         <div style="flex:1"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Gross Weight (KG)</div>
-          <input class="fi" type="tel" placeholder="0.00" value="${row.gross}" style="width:100%;font-size:12px" oninput="setCWCVal(${row.id},'gross',this.value)" onblur="renderCWCRows()"></div>
+          <input class="fi" type="tel" tabindex="${t2}" placeholder="0.00" value="${row.gross}" enterkeyhint="next" style="width:100%;font-size:12px" oninput="setCWCVal(${row.id},'gross',this.value)" onblur="renderCWCRows()"></div>
       </div>
       ${r.net>0?`<div style="margin-top:6px;display:flex;justify-content:space-between;background:#F5F5F5;padding:5px 9px;border-radius:7px">
         <span style="font-size:10px;color:#546E7A">Empty: ${r.empty.toFixed(3)} KG</span>

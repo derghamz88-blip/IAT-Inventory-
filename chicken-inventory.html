@@ -1623,6 +1623,7 @@ function addCTNSize(){
 }
 
 function updItem(p,f,el){
+  const v=el.value;
   if(!S.record.items[p])S.record.items[p]={kg:'',pcs:''};
   S.record.items[p][f]=v;
   el.style.borderColor=(parseFloat(v)||0)>0?(f==='pcs'?'#CE93D8':'#81C784'):'#E0E0E0';

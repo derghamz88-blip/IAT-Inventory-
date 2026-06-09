@@ -98,6 +98,9 @@ function loadSH(){try{const s=localStorage.getItem(SK_SH);SH_DATA=s?JSON.parse(s
 function saveSH(){localStorage.setItem(SK_SH,JSON.stringify(SH_DATA));}
 
 let RC={supplier:'',date:new Date().toISOString().split('T')[0],temp:'',ctns:{},sizePcs:{},smallPcs:10,largePcs:8,cuts:{}};
+let CWC_ROWS=[{id:1,sh:'',ctns:'',gross:'',cwt:''}];
+let CWC_ID=1;
+let CWC_EXPECTED=0; // saved from cwc-cmp field
 
 // ═══ DEFAULT MAPPING ════════════════════════════════
 const DM=[
@@ -380,23 +383,24 @@ function renderCard(r,inf){
       </div>
     </div>
     ${exp?`<div style="padding:11px">
-      ${r.cwc?`<div style="margin-bottom:10px;background:#FFF8E1;border-radius:8px;padding:8px 10px;border:1px solid #FFE082">
+      ${r.cwc?`<div style="margin-bottom:10px;background:#FFF8E1;border-radius:8px;padding:10px;border:1px solid #FFE082">
         <div style="font-size:10px;font-weight:700;color:#F57F17;margin-bottom:6px">⚖️ Carton Weight Verification</div>
-        ${r.cwc.rows.map(row=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid #FFF3E0">
-          <span style="color:#546E7A">${row.sh||'Batch'} — ${row.ctns} CTN</span>
-          <span style="color:#2E7D32;font-weight:700">Net: ${row.net} KG</span>
+        ${r.cwc.rows.map((row,i)=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:4px 0;border-bottom:1px solid #FFF3E0">
+          <span style="color:#546E7A">Batch ${i+1}: ${row.sh||'—'} | ${row.ctns} CTN | ${row.gross} KG gross</span>
+          <span style="color:#2E7D32;font-weight:700">${row.net} KG net</span>
         </div>`).join('')}
-        <div style="display:flex;justify-content:space-between;margin-top:6px;padding-top:4px">
-          <span style="font-size:11px;color:#455A64">Total verified net:</span>
-          <span style="font-size:13px;font-weight:700;color:#2E7D32">${r.cwc.rows.reduce((s,rw)=>s+rw.net,0).toFixed(3)} KG</span>
+        <div style="display:flex;justify-content:space-between;margin-top:7px;padding:5px 0;border-top:2px solid #FFE082">
+          <span style="font-size:12px;font-weight:700;color:#455A64">Total Net:</span>
+          <span style="font-size:13px;font-weight:700;color:#2E7D32">${(r.cwc.totalNet||r.cwc.rows.reduce((s,rw)=>s+rw.net,0)).toFixed(3)} KG</span>
         </div>
-        <div style="display:flex;justify-content:space-between;margin-top:3px">
+        <div style="display:flex;justify-content:space-between;padding:3px 0">
           <span style="font-size:11px;color:#455A64">Expected (receipt):</span>
-          <span style="font-size:13px;font-weight:700;color:#1565C0">${r.cwc.expected} KG</span>
+          <span style="font-size:12px;font-weight:700;color:#1565C0">${r.cwc.expected} KG</span>
         </div>
-        ${(()=>{const net=r.cwc.rows.reduce((s,rw)=>s+rw.net,0);const diff=net-r.cwc.expected;const ok=Math.abs(diff)<0.5;
-          return`<div style="margin-top:5px;padding:5px 8px;border-radius:6px;background:${ok?'#E8F5E9':'#FFEBEE'};text-align:center">
-          <span style="font-size:12px;font-weight:700;color:${ok?'#2E7D32':'#C62828'}">${ok?'✅ Match':'⚠️ Diff: '+(diff>0?'+':'')+diff.toFixed(3)+' KG'}</span></div>`;})()}
+        ${r.cwc.diff!==undefined?`<div style="margin-top:5px;padding:6px 10px;border-radius:6px;background:${Math.abs(r.cwc.diff)<0.5?'#E8F5E9':'#FFEBEE'};display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:11px;color:#455A64">Difference:</span>
+          <span style="font-size:13px;font-weight:700;color:${Math.abs(r.cwc.diff)<0.5?'#2E7D32':'#C62828'}">${Math.abs(r.cwc.diff)<0.5?'✅ Match':'⚠️ '+(r.cwc.diff>0?'+':'')+r.cwc.diff+' KG'}</span>
+        </div>`:''}
       </div>`:''}
       ${r.ctns&&Object.keys(r.ctns).length?`<div style="margin-bottom:10px;background:#E8F5E9;border-radius:8px;padding:8px 10px">
         <div style="font-size:10px;font-weight:700;color:#2E7D32;margin-bottom:5px">🐔 Whole Chicken (CTN)</div>
@@ -664,11 +668,18 @@ function saveReceiptAsRec(){
     const res=calcCWCRow(row);
     return{sh:row.sh,ctns:parseFloat(row.ctns),gross:parseFloat(row.gross),net:parseFloat(res.net.toFixed(3))};
   });
-  const expectedKG=t.grand;
+  const cwcTotalNet=cwcData.reduce((s,r)=>s+r.net,0);
+  const cwcExpected=CWC_EXPECTED||parseFloat(t.grand)||0;
+  const cwcDiff=cwcTotalNet-cwcExpected;
   const r={id:gid(),date:RC.date,notes:'Receivables'+(RC.supplier?' — '+RC.supplier:''),
     items:compactItems(items),
     ctns:Object.keys(ctns).length?ctns:undefined,
-    cwc:cwcData.length?{rows:cwcData,expected:parseFloat(expectedKG.toFixed(3))}:undefined
+    cwc:cwcData.length?{
+      rows:cwcData,
+      totalNet:parseFloat(cwcTotalNet.toFixed(3)),
+      expected:parseFloat(cwcExpected.toFixed(3)),
+      diff:parseFloat(cwcDiff.toFixed(3))
+    }:undefined
   };
   D.receivables=[r,...D.receivables];save();
   RC={supplier:'',date:new Date().toISOString().split('T')[0],temp:'',ctns:{},sizePcs:{},largePcs:8,cuts:{}};
@@ -1067,7 +1078,7 @@ function updCWCTotal(){
 function updCWCRow(id,f,v){const r=CWC_ROWS.find(x=>x.id===id);if(r){r[f]=v;renderCWCRows();}}
 function setCWCVal(id,f,v){const r=CWC_ROWS.find(x=>x.id===id);if(r)r[f]=v;}
 function saveCWCAndClose(){
-  // Flush ALL inputs (both from renderCWCRows and addCWCRowFocus)
+  // Flush ALL inputs
   document.querySelectorAll('#cwc-rows input[type="tel"]').forEach(inp=>{
     if(!inp.id)return;
     const m=inp.id.match(/cwc-(ctn|gross)-(\d+)/);
@@ -1075,10 +1086,17 @@ function saveCWCAndClose(){
     const row=CWC_ROWS.find(r=>r.id==m[2]);
     if(row)row[m[1]==='ctn'?'ctns':'gross']=inp.value;
   });
+  // Save compare value
+  const cmpEl=document.getElementById('cwc-cmp');
+  CWC_EXPECTED=parseFloat(cmpEl?.value)||0;
   document.getElementById('cwc-modal')?.remove();
   const tot=CWC_ROWS.reduce((s,r)=>s+calcCWCRow(r).net,0);
   const valid=CWC_ROWS.filter(r=>parseFloat(r.ctns)>0&&parseFloat(r.gross)>0).length;
-  if(valid>0)showToast('⚖️ '+valid+' batch(es) saved — '+tot.toFixed(3)+' KG net');
+  if(valid>0){
+    const diff=tot-CWC_EXPECTED;
+    const ok=CWC_EXPECTED>0&&Math.abs(diff)<0.5;
+    showToast('⚖️ '+valid+' batch(es): '+tot.toFixed(3)+' KG'+(CWC_EXPECTED>0?(ok?' ✅':' ⚠️ '+diff.toFixed(3)+' KG'):''));
+  }
 }
 function updCWC(){updCWCTotal();}
 function addCWCRow(){CWC_ID++;CWC_ROWS.push({id:CWC_ID,sh:'',ctns:'',gross:'',cwt:''});renderCWCRows();}

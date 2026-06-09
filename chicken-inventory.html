@@ -100,7 +100,8 @@ function saveSH(){localStorage.setItem(SK_SH,JSON.stringify(SH_DATA));}
 let RC={supplier:'',date:new Date().toISOString().split('T')[0],temp:'',ctns:{},sizePcs:{},smallPcs:10,largePcs:8,cuts:{}};
 let CWC_ROWS=[{id:1,sh:'',ctns:'',gross:'',cwt:''}];
 let CWC_ID=1;
-let CWC_EXPECTED=0; // saved from cwc-cmp field
+let CWC_EXPECTED=0;
+let CWC_LAST_SH='';
 
 // ═══ DEFAULT MAPPING ════════════════════════════════
 const DM=[
@@ -1050,9 +1051,15 @@ function renderCWCRows(){
       ${row.sh==='custom'?`<div style="margin-bottom:6px"><input class="fi" type="tel" tabindex="-1" placeholder="Empty CTN weight KG" value="${row.cwt||''}" style="width:100%;font-size:11px" oninput="setCWCVal(${row.id},'cwt',this.value)" onblur="renderCWCRows()"></div>`:''}
       <div style="display:flex;gap:6px">
         <div style="flex:1"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">No. of CTN</div>
-          <input class="fi" type="tel" id="cwc-ctn-${row.id}" tabindex="${t1}" placeholder="0" value="${row.ctns}" enterkeyhint="next" style="width:100%;font-size:12px" oninput="setCWCVal(${row.id},'ctns',this.value)" onblur="renderCWCRows()"></div>
+          <input class="fi" type="tel" inputmode="decimal" id="cwc-ctn-${row.id}" tabindex="${t1}" placeholder="0" value="${row.ctns}" enterkeyhint="next"
+            style="width:100%;font-size:13px;font-weight:700;text-align:center"
+            oninput="setCWCVal(${row.id},'ctns',this.value)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('cwc-gross-${row.id}')?.focus();}"></div>
         <div style="flex:1"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Gross Weight (KG)</div>
-          <input class="fi" type="tel" id="cwc-gross-${row.id}" tabindex="${t2}" placeholder="0.00" value="${row.gross}" enterkeyhint="next" style="width:100%;font-size:12px" oninput="setCWCVal(${row.id},'gross',this.value)" onblur="renderCWCRows()" onkeydown="if(event.key==='Enter'){event.preventDefault();addCWCRowFocus();}"></div>
+          <input class="fi" type="tel" inputmode="decimal" id="cwc-gross-${row.id}" tabindex="${t2}" placeholder="0.00" value="${row.gross}" enterkeyhint="next"
+            style="width:100%;font-size:13px;font-weight:700;text-align:center"
+            oninput="setCWCVal(${row.id},'gross',this.value);updCWCTotal()"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();addCWCRowFocus();}"></div>
       </div>
       ${r.net>0?`<div style="margin-top:6px;display:flex;justify-content:space-between;background:#F5F5F5;padding:5px 9px;border-radius:7px">
         <span style="font-size:10px;color:#546E7A">Empty: ${r.empty.toFixed(3)} KG</span>
@@ -1075,7 +1082,7 @@ function updCWCTotal(){
       <div style="font-size:16px;font-weight:700;color:${Math.abs(d)<0.5?'#2E7D32':'#E65100'}">${d>=0?'+':''}${d.toFixed(3)} KG (${p>=0?'+':''}${p.toFixed(1)}%)</div>`;
   }else if(dd)dd.style.display='none';
 }
-function updCWCRow(id,f,v){const r=CWC_ROWS.find(x=>x.id===id);if(r){r[f]=v;renderCWCRows();}}
+function updCWCRow(id,f,v){const r=CWC_ROWS.find(x=>x.id===id);if(r){r[f]=v;if(f==='sh'&&v)CWC_LAST_SH=v;renderCWCRows();}}
 function setCWCVal(id,f,v){const r=CWC_ROWS.find(x=>x.id===id);if(r)r[f]=v;}
 function saveCWCAndClose(){
   // Flush ALL inputs
@@ -1103,33 +1110,35 @@ function addCWCRow(){CWC_ID++;CWC_ROWS.push({id:CWC_ID,sh:'',ctns:'',gross:'',cw
 function removeCWCRow(id){CWC_ROWS=CWC_ROWS.filter(r=>r.id!==id);renderCWCRows();}
 
 function addCWCRowFocus(){
-  // Save current input values before appending
-  document.querySelectorAll('#cwc-rows input[type="tel"]:not([tabindex="-1"])').forEach(inp=>{
-    const m=inp.id&&inp.id.match(/cwc-(ctn|gross)-(\d+)/);
+  document.querySelectorAll('#cwc-rows input[type="tel"]').forEach(inp=>{
+    const m=inp.id?.match(/cwc-(ctn|gross)-(\d+)/);
     if(m){const row=CWC_ROWS.find(r=>r.id==m[2]);if(row)row[m[1]==='ctn'?'ctns':'gross']=inp.value;}
   });
-  CWC_ID++;
-  const id=CWC_ID;
-  CWC_ROWS.push({id,sh:'',ctns:'',gross:'',cwt:''});
-  const i=CWC_ROWS.length;
-  const t1=100+(i-1)*2;const t2=t1+1;
-  const shOpts=['<option value="">— Select —</option>',...SH_DATA.map(s=>`<option value="${s.name}">${s.name} (${s.wt})</option>`),'<option value="custom">Custom...</option>'].join('');
+  CWC_ID++;const id=CWC_ID;
+  CWC_ROWS.push({id,sh:CWC_LAST_SH||'',ctns:'',gross:'',cwt:''});
+  const i=CWC_ROWS.length;const t1=100+(i-1)*2;const t2=t1+1;
+  const shOpts=['<option value="">\u2014 Select \u2014</option>',...SH_DATA.map(s=>`<option value="${s.name}"${CWC_LAST_SH===s.name?' selected':''}>${s.name} (${s.wt} KG/CTN)</option>`),'<option value="custom">Custom...</option>'].join('');
   const div=document.createElement('div');
   div.style.cssText='border:1px solid #ECEFF1;border-radius:10px;padding:10px;margin-bottom:8px;background:#FAFAFA';
   div.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
     <span style="font-size:11px;font-weight:700;color:#E65100">Batch ${i}</span>
-    <button onclick="removeCWCRow(${id})" style="border:none;background:none;font-size:14px;cursor:pointer;color:#EF9A9A;padding:2px 5px">× remove</button>
+    <button onclick="removeCWCRow(${id})" style="border:none;background:none;font-size:14px;cursor:pointer;color:#EF9A9A;padding:2px 5px">\u00D7 remove</button>
   </div>
   <div style="margin-bottom:6px"><select tabindex="-1" class="fi" style="width:100%;font-size:11px" onchange="updCWCRow(${id},'sh',this.value)">${shOpts}</select></div>
   <div style="display:flex;gap:6px">
     <div style="flex:1"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">No. of CTN</div>
-      <input class="fi" type="tel" id="cwc-ctn-${id}" tabindex="${t1}" placeholder="0" enterkeyhint="next" style="width:100%;font-size:12px" oninput="setCWCVal(${id},'ctns',this.value)" onblur="renderCWCRows()"></div>
+      <input class="fi" type="tel" inputmode="decimal" id="cwc-ctn-${id}" tabindex="${t1}" placeholder="0" enterkeyhint="next"
+        style="width:100%;font-size:13px;font-weight:700;text-align:center"
+        oninput="setCWCVal(${id},'ctns',this.value)"
+        onkeydown="if(event.key===\'Enter\'){event.preventDefault();document.getElementById(\'cwc-gross-${id}\')?.focus();}"></div>
     <div style="flex:1"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Gross Weight (KG)</div>
-      <input class="fi" type="tel" id="cwc-gross-${id}" tabindex="${t2}" placeholder="0.00" enterkeyhint="next" style="width:100%;font-size:12px" oninput="setCWCVal(${id},'gross',this.value)" onblur="renderCWCRows()" onkeydown="if(event.key==='Enter'){event.preventDefault();addCWCRowFocus();}"></div>
+      <input class="fi" type="tel" inputmode="decimal" id="cwc-gross-${id}" tabindex="${t2}" placeholder="0.00" enterkeyhint="next"
+        style="width:100%;font-size:13px;font-weight:700;text-align:center"
+        oninput="setCWCVal(${id},'gross',this.value);updCWCTotal()"
+        onkeydown="if(event.key===\'Enter\'){event.preventDefault();addCWCRowFocus();}"></div>
   </div>`;
   document.getElementById('cwc-rows').appendChild(div);
-  // Focus immediately — no timeout = keyboard stays open
-  document.getElementById('cwc-ctn-'+id).focus();
+  document.getElementById('cwc-ctn-'+id)?.focus();
   updCWCTotal();
 }
 function removeCWCRow(id){CWC_ROWS=CWC_ROWS.filter(r=>r.id!==id);renderCWCRows();}

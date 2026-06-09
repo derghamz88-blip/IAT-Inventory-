@@ -385,7 +385,10 @@ function renderCard(r,inf){
     </div>
     ${exp?`<div style="padding:11px">
       ${r.cwc?`<div style="margin-bottom:10px;background:#FFF8E1;border-radius:8px;padding:10px;border:1px solid #FFE082">
-        <div style="font-size:10px;font-weight:700;color:#F57F17;margin-bottom:6px">⚖️ Carton Weight Verification</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-size:10px;font-weight:700;color:#F57F17">⚖️ Carton Weight Verification</div>
+          <button onclick="editCWC('${r.id}')" style="border:none;background:#FF8F00;color:#fff;border-radius:6px;padding:3px 10px;cursor:pointer;font-size:11px">✏️ Edit</button>
+        </div>
         ${r.cwc.rows.map((row,i)=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:4px 0;border-bottom:1px solid #FFF3E0">
           <span style="color:#546E7A">Batch ${i+1}: ${row.sh||'—'} | ${row.ctns} CTN | ${row.gross} KG gross</span>
           <span style="color:#2E7D32;font-weight:700">${row.net} KG net</span>
@@ -402,8 +405,9 @@ function renderCard(r,inf){
           <span style="font-size:11px;color:#455A64">Difference:</span>
           <span style="font-size:13px;font-weight:700;color:${Math.abs(r.cwc.diff)<0.5?'#2E7D32':'#C62828'}">${Math.abs(r.cwc.diff)<0.5?'✅ Match':'⚠️ '+(r.cwc.diff>0?'+':'')+r.cwc.diff+' KG'}</span>
         </div>`:''}
-      </div>`:''}
-      ${r.ctns&&Object.keys(r.ctns).length?`<div style="margin-bottom:10px;background:#E8F5E9;border-radius:8px;padding:8px 10px">
+      </div>`:S.tab==='receivables'?`<div style="margin-bottom:10px">
+        <button onclick="addCWCToRecord('${r.id}')" style="width:100%;padding:8px;background:#FFF3E0;color:#E65100;border:1px dashed #FFB74D;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600">⚖️ Add Carton Weight Verification</button>
+      </div>`:''}      ${r.ctns&&Object.keys(r.ctns).length?`<div style="margin-bottom:10px;background:#E8F5E9;border-radius:8px;padding:8px 10px">
         <div style="font-size:10px;font-weight:700;color:#2E7D32;margin-bottom:5px">🐔 Whole Chicken (CTN)</div>
         <div style="display:flex;flex-wrap:wrap;gap:4px">
           ${Object.entries(r.ctns).sort((a,b)=>a[0]-b[0]).map(([s,n])=>`<span style="background:#fff;border:1px solid #A5D6A7;border-radius:5px;padding:2px 7px;font-size:11px;font-weight:600">${s}g × ${n}</span>`).join('')}
@@ -998,9 +1002,9 @@ function renderSettingsAPI(){
   </div>`;
 }
 
-function showCartonCalc(){
+function showCartonCalc(recId){
   const ex=document.getElementById('cwc-modal');if(ex){ex.remove();return;}
-  CWC_ROWS=[{id:1,sh:'',ctns:'',gross:'',cwt:''}];CWC_ID=1;
+  if(!recId){CWC_ROWS=[{id:1,sh:'',ctns:'',gross:'',cwt:''}];CWC_ID=1;_cwcTargetRecId=null;}
   const m=document.createElement('div');m.id='cwc-modal';
   m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;overflow-y:auto;display:flex;align-items:flex-start;justify-content:center;padding:20px 16px';
   m.innerHTML=`<div style="background:#fff;border-radius:14px;padding:18px;max-width:400px;width:100%;box-shadow:0 8px 30px rgba(0,0,0,.25)">
@@ -1019,11 +1023,12 @@ function showCartonCalc(){
   document.body.appendChild(m);
   m.addEventListener('click',e=>{if(e.target===m)m.remove();});
   renderCWCRows();
-  // Auto-fill compare with receipt chicken KG
+  // Auto-fill compare: use saved expected or receipt total
   const t=getRCTotals();
-  if(t.chickenKG>0){
+  const expectedVal=CWC_EXPECTED>0?CWC_EXPECTED:(t.chickenKG>0?t.chickenKG:0);
+  if(expectedVal>0){
     const el=document.getElementById('cwc-cmp');
-    if(el){el.value=t.chickenKG.toFixed(3);updCWCTotal();}
+    if(el){el.value=expectedVal.toFixed(3);updCWCTotal();}
   }
 }
 function calcCWCRow(row){
@@ -1084,8 +1089,29 @@ function updCWCTotal(){
 }
 function updCWCRow(id,f,v){const r=CWC_ROWS.find(x=>x.id===id);if(r){r[f]=v;if(f==='sh'&&v)CWC_LAST_SH=v;renderCWCRows();}}
 function setCWCVal(id,f,v){const r=CWC_ROWS.find(x=>x.id===id);if(r)r[f]=v;}
+function editCWC(recId){
+  // Load saved CWC data into CWC_ROWS then open modal
+  const rec=D.receivables.find(r=>r.id===recId);
+  if(!rec)return;
+  if(rec.cwc&&rec.cwc.rows.length){
+    CWC_ROWS=rec.cwc.rows.map((row,i)=>({id:i+1,sh:row.sh||'',ctns:String(row.ctns),gross:String(row.gross),cwt:''}));
+    CWC_ID=CWC_ROWS.length;
+    CWC_EXPECTED=rec.cwc.expected||0;
+  } else {
+    CWC_ROWS=[{id:1,sh:'',ctns:'',gross:'',cwt:''}];CWC_ID=1;CWC_EXPECTED=0;
+  }
+  // Open modal with save-to-record callback
+  _cwcTargetRecId=recId;
+  showCartonCalc(recId);
+}
+function addCWCToRecord(recId){
+  CWC_ROWS=[{id:1,sh:'',ctns:'',gross:'',cwt:''}];CWC_ID=1;CWC_EXPECTED=0;
+  _cwcTargetRecId=recId;
+  showCartonCalc(recId);
+}
+let _cwcTargetRecId=null;
+
 function saveCWCAndClose(){
-  // Flush ALL inputs
   document.querySelectorAll('#cwc-rows input[type="tel"]').forEach(inp=>{
     if(!inp.id)return;
     const m=inp.id.match(/cwc-(ctn|gross)-(\d+)/);
@@ -1093,10 +1119,28 @@ function saveCWCAndClose(){
     const row=CWC_ROWS.find(r=>r.id==m[2]);
     if(row)row[m[1]==='ctn'?'ctns':'gross']=inp.value;
   });
-  // Save compare value
   const cmpEl=document.getElementById('cwc-cmp');
   CWC_EXPECTED=parseFloat(cmpEl?.value)||0;
   document.getElementById('cwc-modal')?.remove();
+
+  // If editing an existing record, save back to it
+  if(_cwcTargetRecId){
+    const rec=D.receivables.find(r=>r.id===_cwcTargetRecId);
+    if(rec){
+      const cwcData=CWC_ROWS.filter(row=>parseFloat(row.ctns)>0&&parseFloat(row.gross)>0).map(row=>{
+        const res=calcCWCRow(row);
+        return{sh:row.sh,ctns:parseFloat(row.ctns),gross:parseFloat(row.gross),net:parseFloat(res.net.toFixed(3))};
+      });
+      const tot=cwcData.reduce((s,r)=>s+r.net,0);
+      const diff=tot-CWC_EXPECTED;
+      rec.cwc={rows:cwcData,totalNet:parseFloat(tot.toFixed(3)),expected:CWC_EXPECTED,diff:parseFloat(diff.toFixed(3))};
+      save();render();
+      showToast('✅ CWC saved to record!');
+    }
+    _cwcTargetRecId=null;
+    return;
+  }
+
   const tot=CWC_ROWS.reduce((s,r)=>s+calcCWCRow(r).net,0);
   const valid=CWC_ROWS.filter(r=>parseFloat(r.ctns)>0&&parseFloat(r.gross)>0).length;
   if(valid>0){

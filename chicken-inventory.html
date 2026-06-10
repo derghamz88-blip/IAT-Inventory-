@@ -426,6 +426,8 @@ function renderCard(r,inf){
 }
 function renderForm(){
   const inf=ti(S.tab),r=S.record;
+  // Always recalc Chicken from CTN for receivables before rendering
+  if(r&&S.tab==='receivables'){recalcChickenFromCTN();}
   return`
   <div class="card" style="border:1.5px solid ${inf.border}">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:11px;flex-wrap:wrap;gap:6px">
@@ -1718,7 +1720,15 @@ function startNew(){
   S.record=r;S.view='form';render();
 }
 function cancelForm(){S.view='list';S.record=null;S.search='';render();}
-function editRec(id){const r=D[dk(S.tab)].find(r=>r.id===id);if(r){S.record={...JSON.parse(JSON.stringify(r)),items:expandItems(r.items)};S.view='form';render();}}
+function editRec(id){
+  const r=D[dk(S.tab)].find(r=>r.id===id);
+  if(r){
+    S.record={...JSON.parse(JSON.stringify(r)),items:expandItems(r.items)};
+    // Auto-calculate Chicken KG from CTN sizes when opening receivables edit
+    if(S.tab==='receivables'){recalcChickenFromCTN();}
+    S.view='form';render();
+  }
+}
 function delRec(id){if(!confirm('Delete?'))return;D[dk(S.tab)]=D[dk(S.tab)].filter(r=>r.id!==id);save();render();}
 function toggleCard(id){S.expanded.has(id)?S.expanded.delete(id):S.expanded.add(id);render();}
 function saveRec(){
@@ -1758,41 +1768,43 @@ function renderCTNEditRows(){
   const ctns=r.ctns||{};
   const entries=Object.entries(ctns).sort((a,b)=>a[0]-b[0]);
   if(!entries.length)return`<div style="font-size:11px;color:#90A4AE;text-align:center;padding:8px">No CTN data — tap "+ Add Size" to add</div>`;
-  return entries.map(([s,n])=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+  return entries.map(([s,n])=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
     <select class="fi" style="width:90px;font-size:12px" onchange="updCTNSize('${s}',this.value,'size')">
       ${REC_SIZES.map(sz=>`<option value="${sz}"${sz==s?' selected':''}>${sz}g</option>`).join('')}
     </select>
     <span style="font-size:11px;color:#546E7A">×</span>
     <input class="fi" type="tel" value="${n}" placeholder="0" style="width:60px;font-size:13px;font-weight:700;text-align:center" oninput="updCTNSize('${s}','${s}','count',this.value)">
     <span style="font-size:11px;color:#90A4AE">CTN</span>
-    <button onclick="delCTNSize('${s}')" style="border:none;background:none;color:#EF9A9A;font-size:14px;cursor:pointer;padding:2px 6px">×</button>
+    <button onclick="delCTNSize('${s}');return false;"
+      style="border:none;background:#FFEBEE;color:#C62828;font-size:16px;cursor:pointer;padding:6px 12px;border-radius:8px;min-width:40px;min-height:36px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🗑</button>
   </div>`).join('');
 }
 
 function recalcChickenFromCTN(){
-  if(!S.record?.ctns)return;
+  if(!S.record)return;
   const pcsMap=S.record.sizePcs||{};
+  const ctns=S.record.ctns||{};
   let total=0;
-  Object.entries(S.record.ctns).forEach(([size,count])=>{
+  Object.entries(ctns).forEach(([size,count])=>{
     const pcs=parseFloat(pcsMap[size])||10;
     total+=(parseFloat(count)||0)*pcs*(parseInt(size)/1000);
   });
-  if(total<=0)return;
   if(!S.record.items)S.record.items=emptyItems();
   if(!S.record.items.Chicken)S.record.items.Chicken={kg:'',pcs:''};
-  S.record.items.Chicken.kg=total.toFixed(3);
+  S.record.items.Chicken.kg=total>0?total.toFixed(3):'0';
 
   // Update Chicken input in form
   const ci=document.querySelector('[data-prod="Chicken"][data-field="kg"]');
-  if(ci){ci.value=total.toFixed(3);ci.style.background='#FFFDE7';}
+  if(ci){ci.value=total>0?total.toFixed(3):'0';ci.style.background=total>0?'#FFFDE7':'#fff';}
 
   // Update stat badges
   const stKg=document.getElementById('stat-kg');
   const stComb=document.getElementById('stat-comb');
   const stCnt=document.getElementById('stat-cnt');
   const totKg=totalKg(S.record);
+  const combKg=PARENT_PRODUCTS.reduce((s,p)=>s+getTotalKg(S.record.items,p),0);
   if(stKg)stKg.textContent=totKg.toFixed(2);
-  if(stComb)stComb.textContent=combinedKg(S.record).toFixed(2);
+  if(stComb)stComb.textContent=combKg.toFixed(2);
   if(stCnt)stCnt.textContent=filled(S.record);
 }
 
@@ -1802,33 +1814,20 @@ function updCTNSize(oldSize,newVal,field,countVal){
     const count=S.record.ctns[oldSize]||0;
     delete S.record.ctns[oldSize];
     S.record.ctns[newVal]=count;
+    recalcChickenFromCTN();
+    const el=document.getElementById('ctn-edit-rows');
+    if(el)el.innerHTML=renderCTNEditRows();
   } else {
     S.record.ctns[oldSize]=parseFloat(countVal)||0;
-  }
-  recalcChickenFromCTN();
-  const el=document.getElementById('ctn-edit-rows');
-  if(el)el.innerHTML=renderCTNEditRows();
-  // Update comparison badge in CTN header
-  const ctnCard=el?.closest('.card');
-  if(ctnCard){
-    const badge=ctnCard.querySelector('span[style*="border-radius:5px"]');
-    const ctns2=S.record.ctns||{};const pcsMap2=S.record.sizePcs||{};
-    const ctnKG=Object.entries(ctns2).reduce((s,[sz,n])=>s+(parseFloat(n)||0)*(parseFloat(pcsMap2[sz])||10)*(parseInt(sz)/1000),0);
-    const cwcNet=S.record.cwc?S.record.cwc.rows.reduce((s,r)=>s+r.net,0):0;
-    if(badge&&cwcNet>0&&ctnKG>0){
-      const diff=cwcNet-ctnKG;const ok=Math.abs(diff)<0.5;
-      badge.textContent=ok?'✅':('⚠️ '+(diff>0?'+':'')+diff.toFixed(2)+' KG');
-      badge.style.background=ok?'#E8F5E9':'#FFEBEE';
-      badge.style.color=ok?'#2E7D32':'#C62828';
-    }
+    recalcChickenFromCTN(); // updates Chicken KG + badges only, no re-render
   }
 }
 
 function delCTNSize(s){
-  if(!S.record.ctns)return;
-  delete S.record.ctns[s];
-  const el=document.getElementById('ctn-edit-rows');
-  if(el)el.innerHTML=renderCTNEditRows();
+  if(!S.record?.ctns)return;
+  delete S.record.ctns[String(s)];
+  recalcChickenFromCTN();
+  render();
 }
 
 function addCTNSize(){

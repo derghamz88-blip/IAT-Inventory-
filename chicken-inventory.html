@@ -465,7 +465,19 @@ function renderForm(){
   ${S.tab==='receivables'?`<div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
       <h3 style="margin:0;font-size:13px;color:#2E7D32">🐔 Whole Chicken (CTN)</h3>
-      <button class="btn" style="background:#2E7D32;color:#fff;font-size:11px;padding:3px 10px" onclick="addCTNSize()">+ Add Size</button>
+      <div style="display:flex;gap:6px;align-items:center">
+        ${(()=>{
+          const ctns=S.record.ctns||{};const pcsMap=S.record.sizePcs||{};
+          const ctnKG=Object.entries(ctns).reduce((s,[sz,n])=>s+(parseFloat(n)||0)*(parseFloat(pcsMap[sz])||10)*(parseInt(sz)/1000),0);
+          const cwcNet=S.record.cwc?S.record.cwc.rows.reduce((s,r)=>s+r.net,0):0;
+          if(cwcNet>0&&ctnKG>0){
+            const diff=cwcNet-ctnKG;const ok=Math.abs(diff)<0.5;
+            return`<span style="font-size:10px;padding:2px 7px;border-radius:5px;background:${ok?'#E8F5E9':'#FFEBEE'};color:${ok?'#2E7D32':'#C62828'};font-weight:700">${ok?'✅':('⚠️ '+(diff>0?'+':'')+diff.toFixed(2)+' KG')}</span>`;
+          }
+          return`<span style="font-size:10px;color:#90A4AE">${ctnKG>0?ctnKG.toFixed(2)+' KG':''}</span>`;
+        })()}
+        <button class="btn" style="background:#2E7D32;color:#fff;font-size:11px;padding:3px 10px" onclick="addCTNSize()">+ Add Size</button>
+      </div>
     </div>
     <div id="ctn-edit-rows">
       ${renderCTNEditRows()}
@@ -510,7 +522,7 @@ function renderPT(items,readOnly,srch){
     const nameHtml=is500?`<div style="color:#7B1FA2;font-size:11px;word-break:break-word">${p}</div><div style="color:#B0BEC5;font-size:9px">↗ ${C_MAP[p]}</div>`:`<div style="font-weight:${hv?700:400};color:${hv?'#1B5E20':'#37474F'};font-size:11px;word-break:break-word">${p}</div>`;
     let qtyHtml='';
     if(readOnly){qtyHtml=hv?`<div style="text-align:center;font-weight:700;color:${uc}">${raw}<span style="font-size:9px;opacity:.7"> ${ul}</span></div>`:`<div style="text-align:center;color:#CFD8DC">—</div>`;}
-    else{qtyHtml=`<div style="display:flex;align-items:center;gap:2px"><input type="number" min="0" step="any" style="width:100%;padding:4px 3px;border:1.5px solid ${hv?(is500?'#CE93D8':'#81C784'):'#E0E0E0'};border-radius:5px;text-align:center;font-size:11px;outline:none;background:${hv?(is500?'#F8F0FF':'#F9FBE7'):'#fff'};font-family:inherit" value="${raw}" placeholder="0" oninput="updItem('${p.replace(/'/g,"\\'")}','${field}',this)"><span style="font-size:9px;color:${uc};font-weight:700;min-width:14px;flex-shrink:0">${ul}</span></div>`;}
+    else{qtyHtml=`<div style="display:flex;align-items:center;gap:2px"><input type="number" min="0" step="any" style="width:100%;padding:4px 3px;border:1.5px solid ${hv?(is500?'#CE93D8':'#81C784'):'#E0E0E0'};border-radius:5px;text-align:center;font-size:11px;outline:none;background:${hv?(is500?'#F8F0FF':'#F9FBE7'):'#fff'};font-family:inherit" value="${raw}" placeholder="0" data-prod="${p}" data-field="${field}" oninput="updItem('${p.replace(/'/g,"\\'")}','${field}',this)"><span style="font-size:9px;color:${uc};font-weight:700;min-width:14px;flex-shrink:0">${ul}</span></div>`;}
     let combHtml='<td style="background:#F5FAFA"></td>';
     if(!is500){const ck=getTotalKg(items,p);const fp=ck-(parseFloat(items[p]?.kg)||0);combHtml=`<td id="tk-${pidx}" style="padding:4px 4px;text-align:center;background:${ck>0?'#E0F2F1':'#F5FAFA'}">${ck>0?`<div style="font-weight:700;color:#00695C;font-size:12px">${ck.toFixed(2)}</div>${fp>0?`<div style="font-size:9px;color:#2E7D32">+${fp.toFixed(2)}</div>`:''}`:`<span style="color:#CFD8DC">—</span>`}</td>`;}
     h+=`<tr style="background:${is500?'#FDF8FF':(hv?'#F9FBE7':i%2===0?'#fff':'#FAFAFA')};border-bottom:1px solid #F0F0F0"><td style="padding:4px 3px;color:#BDBDBD;font-size:9px;text-align:center">${pidx+1}</td><td style="padding:4px 5px">${nameHtml}</td><td style="padding:3px 4px">${qtyHtml}</td>${combHtml}</tr>`;
@@ -676,9 +688,11 @@ function saveReceiptAsRec(){
   const cwcTotalNet=cwcData.reduce((s,r)=>s+r.net,0);
   const cwcExpected=CWC_EXPECTED||parseFloat(t.grand)||0;
   const cwcDiff=cwcTotalNet-cwcExpected;
+  const sizePcs={};REC_SIZES.forEach(s=>{const p=getSizePcs(s);if(p!==10)sizePcs[s]=p;});
   const r={id:gid(),date:RC.date,notes:'Receivables'+(RC.supplier?' — '+RC.supplier:''),
     items:compactItems(items),
     ctns:Object.keys(ctns).length?ctns:undefined,
+    sizePcs:Object.keys(sizePcs).length?sizePcs:undefined,
     cwc:cwcData.length?{
       rows:cwcData,
       totalNet:parseFloat(cwcTotalNet.toFixed(3)),
@@ -1709,7 +1723,32 @@ function delRec(id){if(!confirm('Delete?'))return;D[dk(S.tab)]=D[dk(S.tab)].filt
 function toggleCard(id){S.expanded.has(id)?S.expanded.delete(id):S.expanded.add(id);render();}
 function saveRec(){
   const r=S.record;if(!r.date){alert('Please select a date!');return;}
-  r.items=compactItems(r.items); // save only non-empty items
+  r.items=compactItems(r.items);
+  // If receivables with CWC data, recalculate expected from current items
+  if(S.tab==='receivables'&&r.cwc&&r.cwc.rows){
+    // Recalculate chicken KG from items
+    const expanded=expandItems(r.items);
+    let chickenKG=0;
+    PRODUCTS.forEach(p=>{
+      const item=expanded[p];if(!item)return;
+      const kg=parseFloat(item.kg)||0;
+      const pcs=parseFloat(item.pcs)||0;
+      const combined=kg+(C_MAP[p]?0:pcs*0.5);
+      // Only count non-500 products for chicken weight estimate? 
+      // Use combined KG like getRCTotals does
+      chickenKG+=combined;
+    });
+    // Use CTN-based weight if available (more accurate)
+    if(r.ctns&&Object.keys(r.ctns).length){
+      const ctnKG=Object.entries(r.ctns).reduce((s,[sz,n])=>s+parseFloat(n)*parseFloat(sz)/1000,0);
+      if(ctnKG>0)chickenKG=ctnKG;
+    }
+    if(chickenKG>0){
+      r.cwc.expected=parseFloat(chickenKG.toFixed(3));
+      const tot=r.cwc.rows.reduce((s,rw)=>s+rw.net,0);
+      r.cwc.diff=parseFloat((tot-chickenKG).toFixed(3));
+    }
+  }
   const key=dk(S.tab);const i=D[key].findIndex(x=>x.id===r.id);
   if(i>=0)D[key][i]=r;else D[key]=[r,...D[key]];
   save();S.view='list';S.record=null;S.search='';render();
@@ -1730,6 +1769,33 @@ function renderCTNEditRows(){
   </div>`).join('');
 }
 
+function recalcChickenFromCTN(){
+  if(!S.record?.ctns)return;
+  const pcsMap=S.record.sizePcs||{};
+  let total=0;
+  Object.entries(S.record.ctns).forEach(([size,count])=>{
+    const pcs=parseFloat(pcsMap[size])||10;
+    total+=(parseFloat(count)||0)*pcs*(parseInt(size)/1000);
+  });
+  if(total<=0)return;
+  if(!S.record.items)S.record.items=emptyItems();
+  if(!S.record.items.Chicken)S.record.items.Chicken={kg:'',pcs:''};
+  S.record.items.Chicken.kg=total.toFixed(3);
+
+  // Update Chicken input in form
+  const ci=document.querySelector('[data-prod="Chicken"][data-field="kg"]');
+  if(ci){ci.value=total.toFixed(3);ci.style.background='#FFFDE7';}
+
+  // Update stat badges
+  const stKg=document.getElementById('stat-kg');
+  const stComb=document.getElementById('stat-comb');
+  const stCnt=document.getElementById('stat-cnt');
+  const totKg=totalKg(S.record);
+  if(stKg)stKg.textContent=totKg.toFixed(2);
+  if(stComb)stComb.textContent=combinedKg(S.record).toFixed(2);
+  if(stCnt)stCnt.textContent=filled(S.record);
+}
+
 function updCTNSize(oldSize,newVal,field,countVal){
   if(!S.record.ctns)S.record.ctns={};
   if(field==='size'){
@@ -1739,8 +1805,23 @@ function updCTNSize(oldSize,newVal,field,countVal){
   } else {
     S.record.ctns[oldSize]=parseFloat(countVal)||0;
   }
+  recalcChickenFromCTN();
   const el=document.getElementById('ctn-edit-rows');
   if(el)el.innerHTML=renderCTNEditRows();
+  // Update comparison badge in CTN header
+  const ctnCard=el?.closest('.card');
+  if(ctnCard){
+    const badge=ctnCard.querySelector('span[style*="border-radius:5px"]');
+    const ctns2=S.record.ctns||{};const pcsMap2=S.record.sizePcs||{};
+    const ctnKG=Object.entries(ctns2).reduce((s,[sz,n])=>s+(parseFloat(n)||0)*(parseFloat(pcsMap2[sz])||10)*(parseInt(sz)/1000),0);
+    const cwcNet=S.record.cwc?S.record.cwc.rows.reduce((s,r)=>s+r.net,0):0;
+    if(badge&&cwcNet>0&&ctnKG>0){
+      const diff=cwcNet-ctnKG;const ok=Math.abs(diff)<0.5;
+      badge.textContent=ok?'✅':('⚠️ '+(diff>0?'+':'')+diff.toFixed(2)+' KG');
+      badge.style.background=ok?'#E8F5E9':'#FFEBEE';
+      badge.style.color=ok?'#2E7D32':'#C62828';
+    }
+  }
 }
 
 function delCTNSize(s){

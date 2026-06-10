@@ -484,6 +484,9 @@ function renderForm(){
     <div id="ctn-edit-rows">
       ${renderCTNEditRows()}
     </div>
+  </div>
+  <div style="margin-top:4px;margin-bottom:8px">
+    <button onclick="clearAllItems()" style="width:100%;padding:10px;background:#FFEBEE;color:#C62828;border:1.5px dashed #EF9A9A;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700">🗑 Clear All Quantities</button>
   </div>`:''}`;
 }
 
@@ -631,7 +634,7 @@ function renderReceiptCalc(){
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:10px">
       <h2 style="margin:0;font-size:14px;color:${inf.color}">📋 Fresh Chicken Receipt</h2>
       <div style="display:flex;gap:4px;flex-wrap:wrap">
-        <button class="btn" style="background:#ECEFF1;color:#546E7A;font-size:11px" onclick="S.view='list';render()">← Back</button>
+        <button class="btn" style="background:#ECEFF1;color:#546E7A;font-size:11px" onclick="_editRecId=null;S.view='list';render()">← Back</button>
         <label class="btn" style="background:#7B1FA2;color:#fff;font-size:11px;cursor:pointer" title="Take photo">📷<input type="file" accept="image/*" capture="environment" onchange="scanReceiptAI(this)" style="display:none"></label>
         <label class="btn" style="background:#5C6BC0;color:#fff;font-size:11px;cursor:pointer" title="Upload from gallery">🖼️<input type="file" accept="image/*" onchange="scanReceiptAI(this)" style="display:none"></label>
         <button class="btn" style="background:#E65100;color:#fff;font-size:11px" onclick="showCartonCalc()">⚖️ Verify</button>
@@ -702,9 +705,20 @@ function saveReceiptAsRec(){
       diff:parseFloat(cwcDiff.toFixed(3))
     }:undefined
   };
-  D.receivables=[r,...D.receivables];save();
+  if(_editRecId){
+    // Update existing record
+    const idx=D.receivables.findIndex(x=>x.id===_editRecId);
+    if(idx>=0){
+      D.receivables[idx]={...D.receivables[idx],...r,id:_editRecId};
+    }
+    _editRecId=null;
+  } else {
+    D.receivables=[r,...D.receivables];
+  }
+  save();
   RC={supplier:'',date:new Date().toISOString().split('T')[0],temp:'',ctns:{},sizePcs:{},largePcs:8,cuts:{}};
-  S.view='list';render();showToast('✅ Receipt saved as Receivable!');
+  S.view='list';render();showToast(_editRecId?'✅ Record updated!':'✅ Receipt saved as Receivable!');
+  _editRecId=null;
 }
 
 // ─── Smart Local Text Parser (no AI needed) ──────
@@ -1720,14 +1734,30 @@ function startNew(){
   S.record=r;S.view='form';render();
 }
 function cancelForm(){S.view='list';S.record=null;S.search='';render();}
+let _editRecId=null;
 function editRec(id){
-  const r=D[dk(S.tab)].find(r=>r.id===id);
-  if(r){
-    S.record={...JSON.parse(JSON.stringify(r)),items:expandItems(r.items)};
-    // Auto-calculate Chicken KG from CTN sizes when opening receivables edit
-    if(S.tab==='receivables'){recalcChickenFromCTN();}
-    S.view='form';render();
+  const r=D[dk(S.tab)].find(x=>x.id===id);
+  if(!r)return;
+  if(S.tab==='receivables'){
+    _editRecId=id;
+    const sup=r.notes?r.notes.replace(/^Receivables\s*[—\-]\s*/,'').trim():'';
+    RC={supplier:sup,date:r.date,temp:r.temp||'',ctns:{...(r.ctns||{})},
+        sizePcs:{...(r.sizePcs||{})},smallPcs:RC.smallPcs||10,largePcs:RC.largePcs||8,cuts:{}};
+    const items=expandItems(r.items);
+    CUT_PRODUCTS.forEach(c=>{
+      const it=items[c.prod];if(!it)return;
+      RC.cuts[c.key]=c.unit==='pcs'?(parseFloat(it.pcs)||0):(parseFloat(it.kg)||0);
+    });
+    if(r.cwc&&r.cwc.rows){
+      CWC_ROWS=r.cwc.rows.map((row,i)=>({id:i+1,sh:row.sh||'',ctns:String(row.ctns),gross:String(row.gross),cwt:''}));
+      CWC_ID=CWC_ROWS.length;CWC_EXPECTED=r.cwc.expected||0;
+    } else {
+      CWC_ROWS=[{id:1,sh:'',ctns:'',gross:'',cwt:''}];CWC_ID=1;CWC_EXPECTED=0;
+    }
+    S.view='receipt';render();return;
   }
+  S.record={...JSON.parse(JSON.stringify(r)),items:expandItems(r.items)};
+  S.view='form';render();
 }
 function delRec(id){if(!confirm('Delete?'))return;D[dk(S.tab)]=D[dk(S.tab)].filter(r=>r.id!==id);save();render();}
 function toggleCard(id){S.expanded.has(id)?S.expanded.delete(id):S.expanded.add(id);render();}
@@ -1765,19 +1795,29 @@ function saveRec(){
 }
 function renderCTNEditRows(){
   const r=S.record;if(!r)return'';
-  const ctns=r.ctns||{};
+  const ctns=r.ctns||{};const pcsMap=r.sizePcs||{};
   const entries=Object.entries(ctns).sort((a,b)=>a[0]-b[0]);
   if(!entries.length)return`<div style="font-size:11px;color:#90A4AE;text-align:center;padding:8px">No CTN data — tap "+ Add Size" to add</div>`;
-  return entries.map(([s,n])=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-    <select class="fi" style="width:90px;font-size:12px" onchange="updCTNSize('${s}',this.value,'size')">
-      ${REC_SIZES.map(sz=>`<option value="${sz}"${sz==s?' selected':''}>${sz}g</option>`).join('')}
-    </select>
-    <span style="font-size:11px;color:#546E7A">×</span>
-    <input class="fi" type="tel" value="${n}" placeholder="0" style="width:60px;font-size:13px;font-weight:700;text-align:center" oninput="updCTNSize('${s}','${s}','count',this.value)">
-    <span style="font-size:11px;color:#90A4AE">CTN</span>
-    <button onclick="delCTNSize('${s}');return false;"
-      style="border:none;background:#FFEBEE;color:#C62828;font-size:16px;cursor:pointer;padding:6px 12px;border-radius:8px;min-width:40px;min-height:36px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🗑</button>
-  </div>`).join('');
+  const pcsOptions=[6,7,8,9,10,11,12,14,16].map(n=>`<option value="${n}">${n} pcs</option>`).join('');
+  return entries.map(([s,n])=>{
+    const pcs=pcsMap[s]||10;
+    const wt=(parseFloat(n)||0)*pcs*(parseInt(s)/1000);
+    return`<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;background:#F9FBE7;border-radius:8px;padding:8px">
+      <select class="fi" style="width:82px;font-size:11px" onchange="updCTNSize('${s}',this.value,'size')">
+        ${REC_SIZES.map(sz=>`<option value="${sz}"${sz==s?' selected':''}>${sz}g</option>`).join('')}
+      </select>
+      <input class="fi" type="tel" inputmode="decimal" value="${n}" placeholder="0"
+        style="width:52px;font-size:14px;font-weight:700;text-align:center"
+        oninput="updCTNSize('${s}','${s}','count',this.value)">
+      <span style="font-size:10px;color:#78909C">CTN</span>
+      <select class="fi" style="width:68px;font-size:11px" onchange="updCTNPcs('${s}',this.value)">
+        ${[6,7,8,9,10,11,12,14,16].map(np=>`<option value="${np}"${np==pcs?' selected':''}>${np} pcs</option>`).join('')}
+      </select>
+      <span style="font-size:10px;color:#2E7D32;font-weight:700;min-width:46px">${wt>0?wt.toFixed(1)+' KG':''}</span>
+      <button onclick="delCTNSize('${s}');return false;"
+        style="border:none;background:#FFEBEE;color:#C62828;font-size:13px;cursor:pointer;padding:5px 9px;border-radius:7px;min-height:34px">🗑</button>
+    </div>`;
+  }).join('');
 }
 
 function recalcChickenFromCTN(){
@@ -1823,6 +1863,21 @@ function updCTNSize(oldSize,newVal,field,countVal){
   }
 }
 
+function updCTNPcs(size,pcs){
+  if(!S.record.sizePcs)S.record.sizePcs={};
+  S.record.sizePcs[size]=parseInt(pcs)||10;
+  recalcChickenFromCTN();
+  const el=document.getElementById('ctn-edit-rows');
+  if(el)el.innerHTML=renderCTNEditRows();
+}
+function clearAllItems(){
+  if(!confirm('Clear all quantities?'))return;
+  S.record.items=emptyItems();
+  S.record.ctns={};
+  S.record.sizePcs={};
+  recalcChickenFromCTN();
+  render();
+}
 function delCTNSize(s){
   if(!S.record?.ctns)return;
   delete S.record.ctns[String(s)];

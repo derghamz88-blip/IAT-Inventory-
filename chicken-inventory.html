@@ -320,6 +320,7 @@ function renderHdr(){
         📂<input type="file" accept=".json,.txt" onchange="odLoadFile(this)" style="display:none">
       </label>
       <input id="od-load-input" type="file" accept=".json,.txt" onchange="odLoadFile(this)" style="display:none">
+      <button onclick="showNetCalc()" title="Net Weight Calculator" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">⚖️</button>
       <button onclick="showHdrMenu()" title="More" style="padding:5px 9px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:13px">⋮</button>
     </div>
   </header>`;
@@ -721,7 +722,233 @@ function saveReceiptAsRec(){
   _editRecId=null;
 }
 
-// ─── Smart Local Text Parser (no AI needed) ──────
+// ─── Net Weight Calculator ──────────────────────────
+let NWC_ROWS=[{id:1,count:'',type:'salle',gross:'',cwt:''}];
+let NWC_ID=1;
+const NWC_TYPES=[
+  {key:'salle',label:'Salle (سله)',wt:1.7},
+  {key:'al_khair',label:'Al Khair CTN',wt:0.65},
+  {key:'al_ulyaa',label:'Al Ulyaa CTN',wt:0.53},
+  {key:'custom',label:'Custom...',wt:0},
+];
+
+function getNWCWt(row){
+  if(row.type==='custom')return parseFloat(row.cwt)||0;
+  return NWC_TYPES.find(t=>t.key===row.type)?.wt||0;
+}
+function calcNWCRow(row){
+  const cnt=parseFloat(row.count)||0;
+  const gross=parseFloat(row.gross)||0;
+  const cw=getNWCWt(row);
+  return{net:gross>0?gross-(cnt*cw):0,empty:cnt*cw};
+}
+function getNWCTotal(){return NWC_ROWS.reduce((s,r)=>s+calcNWCRow(r).net,0);}
+
+function showNetCalc(){
+  document.getElementById('nwc-modal')?.remove();
+  NWC_ROWS=[{id:1,count:'',type:'salle',gross:'',cwt:''}];NWC_ID=1;
+  const m=document.createElement('div');
+  m.id='nwc-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:flex-end';
+  m.innerHTML=`<div style="background:#fff;width:100%;border-radius:16px 16px 0 0;padding:16px;max-height:92vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h3 style="margin:0;font-size:15px;color:#E65100">⚖️ Net Weight Calculator</h3>
+      <button onclick="document.getElementById('nwc-modal').remove()" style="border:none;background:none;font-size:22px;cursor:pointer;color:#90A4AE">×</button>
+    </div>
+    <div id="nwc-rows"></div>
+    <button onclick="addNWCRow()" style="width:100%;padding:9px;border:1.5px dashed #FFB74D;background:#FFF8E1;border-radius:9px;cursor:pointer;font-size:13px;color:#E65100;margin-bottom:12px">+ Add Batch</button>
+    <div id="nwc-total" style="background:#E8F5E9;border-radius:10px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <span style="font-size:13px;font-weight:700;color:#455A64">Total Net:</span>
+      <input id="nwc-tot-val" readonly onclick="this.select()"
+        style="font-size:22px;font-weight:800;color:#2E7D32;background:transparent;border:none;outline:none;text-align:right;width:160px;cursor:pointer"
+        value="0.000 KG">
+    </div>
+    <button onclick="copyNWCTotal()" style="width:100%;padding:11px;background:#2E7D32;color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:14px;font-weight:700">📋 Copy Total</button>
+  </div>`;
+  document.body.appendChild(m);
+  renderNWCRows();
+}
+
+function renderNWCRows(){
+  const cont=document.getElementById('nwc-rows');if(!cont)return;
+  const typeOpts=NWC_TYPES.map(t=>`<option value="${t.key}">${t.label}${t.wt>0?' ('+t.wt+' KG)':''}</option>`).join('');
+  cont.innerHTML=NWC_ROWS.map((row,i)=>{
+    const res=calcNWCRow(row);
+    const wt=getNWCWt(row);
+    return`<div style="border:1px solid #ECEFF1;border-radius:10px;padding:10px;margin-bottom:8px;background:#FAFAFA">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+        <span style="font-size:11px;font-weight:700;color:#E65100">Batch ${i+1}</span>
+        ${NWC_ROWS.length>1?`<button onclick="delNWCRow(${row.id})" style="border:none;background:#FFEBEE;color:#C62828;border-radius:6px;padding:3px 9px;cursor:pointer;font-size:12px">🗑</button>`:''}
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <div style="flex:1">
+          <div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Count</div>
+          <input class="fi" type="tel" inputmode="decimal" id="nwc-cnt-${row.id}" placeholder="0" value="${row.count}"
+            style="width:100%;font-size:14px;font-weight:700;text-align:center"
+            oninput="setNWC(${row.id},'count',this.value)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('nwc-gross-${row.id}')?.focus();}">
+        </div>
+        <div style="flex:2">
+          <div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Container Type</div>
+          <select class="fi" style="width:100%;font-size:11px" onchange="setNWC(${row.id},'type',this.value)">
+            ${NWC_TYPES.map(t=>`<option value="${t.key}"${t.key===row.type?' selected':''}>${t.label}${t.wt>0?' ('+t.wt+' KG)':''}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      ${row.type==='custom'?`<div style="margin-bottom:6px">
+        <div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Container Weight (KG each)</div>
+        <input class="fi" type="tel" inputmode="decimal" placeholder="0.000" value="${row.cwt}"
+          style="width:100%;font-size:12px" oninput="setNWC(${row.id},'cwt',this.value)">
+      </div>`:''}
+      <div style="display:flex;gap:6px">
+        <div style="flex:1">
+          <div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Gross Weight (KG)</div>
+          <input class="fi" type="tel" inputmode="decimal" id="nwc-gross-${row.id}" placeholder="0.000" value="${row.gross}"
+            style="width:100%;font-size:14px;font-weight:700;text-align:center"
+            oninput="setNWC(${row.id},'gross',this.value)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();addNWCRow();}">
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end">
+          <div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Net Weight</div>
+          <div style="background:${res.net>0?'#E8F5E9':'#F5F5F5'};border-radius:7px;padding:8px;text-align:center;font-size:14px;font-weight:800;color:${res.net>0?'#2E7D32':'#90A4AE'}">
+            ${res.net>0?res.net.toFixed(3)+' KG':'—'}
+          </div>
+        </div>
+      </div>
+      ${res.net>0&&wt>0?`<div style="font-size:10px;color:#90A4AE;margin-top:4px;text-align:right">
+        ${parseFloat(row.gross).toFixed(3)} − (${row.count} × ${wt}) = ${res.net.toFixed(3)} KG
+      </div>`:''}
+    </div>`;
+  }).join('');
+  const tot=getNWCTotal();
+  const el=document.getElementById('nwc-tot-val');
+  if(el)el.textContent=tot.toFixed(3)+' KG';
+}
+
+function setNWC(id,field,val){
+  const row=NWC_ROWS.find(r=>r.id===id);
+  if(!row)return;
+  row[field]=val;
+  // Update net display for this row only (no full re-render)
+  const res=calcNWCRow(row);
+  const netEl=document.getElementById('nwc-net-'+id);
+  const formulaEl=document.getElementById('nwc-formula-'+id);
+  if(netEl){
+    netEl.textContent=res.net>0?res.net.toFixed(3)+' KG':'—';
+    netEl.style.color=res.net>0?'#2E7D32':'#90A4AE';
+    netEl.style.background=res.net>0?'#E8F5E9':'#F5F5F5';
+  }
+  if(formulaEl){
+    const wt=getNWCWt(row);
+    formulaEl.textContent=res.net>0&&wt>0?`${parseFloat(row.gross||0).toFixed(3)} − (${row.count} × ${wt}) = ${res.net.toFixed(3)} KG`:'';
+  }
+  // Update total
+  const el=document.getElementById('nwc-tot-val');
+  if(el)el.value=getNWCTotal().toFixed(3)+' KG';
+}
+
+function delNWCRow(id){
+  NWC_ROWS=NWC_ROWS.filter(r=>r.id!==id);
+  document.getElementById('nwc-row-'+id)?.remove();
+  // Renumber batch labels
+  NWC_ROWS.forEach((r,i)=>{
+    const lbl=document.getElementById('nwc-lbl-'+r.id);
+    if(lbl)lbl.textContent='Batch '+(i+1);
+  });
+  const el=document.getElementById('nwc-tot-val');
+  if(el)el.value=getNWCTotal().toFixed(3)+' KG';
+}
+
+function buildNWCRowEl(row,idx){
+  const wt=getNWCWt(row);
+  const res=calcNWCRow(row);
+  const div=document.createElement('div');
+  div.id='nwc-row-'+row.id;
+  div.style.cssText='border:1px solid #ECEFF1;border-radius:10px;padding:10px;margin-bottom:8px;background:#FAFAFA';
+  div.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+      <span id="nwc-lbl-${row.id}" style="font-size:11px;font-weight:700;color:#E65100">Batch ${idx+1}</span>
+      <button onclick="delNWCRow(${row.id})" style="border:none;background:#FFEBEE;color:#C62828;border-radius:6px;padding:3px 9px;cursor:pointer;font-size:12px">🗑</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <div style="flex:1">
+        <div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Count</div>
+        <input class="fi" type="tel" inputmode="decimal" id="nwc-cnt-${row.id}" placeholder="0" value="${row.count}"
+          style="width:100%;font-size:15px;font-weight:700;text-align:center"
+          oninput="setNWC(${row.id},'count',this.value)"
+          onkeydown="if(event.key==='Enter'||event.key==='Tab'){event.preventDefault();document.getElementById('nwc-gross-${row.id}')?.focus();}">
+      </div>
+      <div style="flex:2">
+        <div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Container Type</div>
+        <select class="fi" tabindex="-1" style="width:100%;font-size:11px" onchange="setNWC(${row.id},'type',this.value);renderNWCRows()">
+          ${NWC_TYPES.map(t=>`<option value="${t.key}"${t.key===row.type?' selected':''}>${t.label}${t.wt>0?' ('+t.wt+')':''}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px">
+      <div style="flex:1">
+        <div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Gross (KG)</div>
+        <input class="fi" type="tel" inputmode="decimal" id="nwc-gross-${row.id}" placeholder="0.000" value="${row.gross}"
+          style="width:100%;font-size:15px;font-weight:700;text-align:center"
+          oninput="setNWC(${row.id},'gross',this.value)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();addNWCRow();}">
+      </div>
+      <div style="flex:1">
+        <div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Net (KG)</div>
+        <div id="nwc-net-${row.id}" style="background:${res.net>0?'#E8F5E9':'#F5F5F5'};border-radius:7px;padding:8px;text-align:center;font-size:14px;font-weight:800;color:${res.net>0?'#2E7D32':'#90A4AE'}">
+          ${res.net>0?res.net.toFixed(3)+' KG':'—'}
+        </div>
+      </div>
+    </div>
+    <div id="nwc-formula-${row.id}" style="font-size:10px;color:#90A4AE;margin-top:4px;text-align:right">
+      ${res.net>0&&wt>0?`${parseFloat(row.gross).toFixed(3)} − (${row.count} × ${wt}) = ${res.net.toFixed(3)} KG`:''}
+    </div>`;
+  return div;
+}
+
+function renderNWCRows(){
+  const cont=document.getElementById('nwc-rows');if(!cont)return;
+  cont.innerHTML='';
+  NWC_ROWS.forEach((row,i)=>cont.appendChild(buildNWCRowEl(row,i)));
+  const el=document.getElementById('nwc-tot-val');
+  if(el)el.value=getNWCTotal().toFixed(3)+' KG';
+}
+
+function addNWCRow(){
+  // Save current gross input value before adding
+  const last=NWC_ROWS[NWC_ROWS.length-1];
+  if(last){
+    const grossEl=document.getElementById('nwc-gross-'+last.id);
+    if(grossEl)last.gross=grossEl.value;
+  }
+  NWC_ID++;
+  const newRow={id:NWC_ID,count:'',type:last?.type||'salle',gross:'',cwt:last?.cwt||''};
+  NWC_ROWS.push(newRow);
+  const cont=document.getElementById('nwc-rows');
+  if(cont){
+    cont.appendChild(buildNWCRowEl(newRow,NWC_ROWS.length-1));
+    // Focus count immediately — keyboard stays open
+    document.getElementById('nwc-cnt-'+NWC_ID)?.focus();
+  }
+}
+function copyNWCTotal(){
+  const tot=getNWCTotal().toFixed(3);
+  // Try clipboard API first
+  if(navigator.clipboard&&window.isSecureContext){
+    navigator.clipboard.writeText(tot).then(()=>showToast('📋 Copied: '+tot+' KG')).catch(()=>fallbackCopy(tot));
+  } else {
+    fallbackCopy(tot);
+  }
+}
+function fallbackCopy(txt){
+  const inp=document.createElement('input');
+  inp.value=txt;inp.style.cssText='position:fixed;top:0;left:0;opacity:0';
+  document.body.appendChild(inp);
+  inp.focus();inp.select();inp.setSelectionRange(0,99999);
+  try{document.execCommand('copy');showToast('📋 Copied: '+txt+' KG');}
+  catch(e){showToast('اضغط مطولاً على الرقم ونسخه يدوياً');}
+  document.body.removeChild(inp);
+}
 function findProductKey(name,is500){
   const n=name.toLowerCase().trim();
   for(const p of PRODUCTS){
@@ -2518,7 +2745,7 @@ function showHdrMenu(){
   m.style.cssText='position:fixed;top:52px;right:8px;background:#fff;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.2);z-index:9999;min-width:210px;overflow:hidden';
   m.innerHTML='<div style="padding:6px 0">'
     +'<div style="padding:6px 14px;font-size:10px;color:#90A4AE;font-weight:600">ONEDRIVE</div>'
-    +'<button onclick="odSaveClick();this.closest(\'#hdr-menu\').remove()" style="width:100%;padding:9px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px"><span>☁️</span> Save to OneDrive</button>'
+    +'<button onclick="showNetCalc();this.closest(\'#hdr-menu\').remove()" style="width:100%;padding:9px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px"><span>⚖️</span> Net Weight Calculator</button>'
     +'<button onclick="odLoadClick();this.closest(\'#hdr-menu\').remove()" style="width:100%;padding:9px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px"><span>📥</span> Load from OneDrive</button>'
     +'<div style="height:1px;background:#ECEFF1;margin:4px 0"></div>'
     +'<div style="padding:4px 14px;font-size:10px;color:#90A4AE;font-weight:600">LOCAL BACKUP</div>'

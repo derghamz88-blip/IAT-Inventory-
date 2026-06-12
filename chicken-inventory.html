@@ -1132,27 +1132,30 @@ async function scanFormAI(input){
     const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
     const products=PRODUCTS.join(', ');
     const prod500=PRODUCTS.filter(p=>p.endsWith(' 500')).map(p=>p.replace(' 500',''));
-    const prompt=`You are analyzing a chicken product inventory image. Extract ALL products, quantities, AND date if visible.
+    const allProds=PRODUCTS.join(', ');
+    const prompt=`You are reading an IAT Trading printed form. Extract ALL filled values.
 
-MAPPING RULES (very important):
-- If image shows "ProductName X pcs" OR "ProductName X trays" OR "ProductName X trey" → that product is in 500g packs → output: "ProductName 500": {"pcs": X}
-- If image shows "ProductName X kg" → output: "ProductName": {"kg": X}
-- "tray", "trays", "trey" always means 500g pack = use pcs
-- Products that have 500g versions: ${prod500.join(', ')}
-- If you see a date (like "1/6/2026" or "June 1") → include "_date": "YYYY-MM-DD"
+THIS IS A STRUCTURED FORM with labeled rows. Each row has:
+- Product name on the left (already printed)
+- A value written in the KG or Pcs column
 
-Examples:
-- "Thigh 34 pcs" → "Thigh 500": {"pcs": 34}
-- "Wings 9 pcs" → "Wings 500": {"pcs": 9}
-- "Liver 20 pcs" → "Liver 500": {"pcs": 20}
-- "Bone 216 kg" → "Bone": {"kg": 216}
-- "Breast 25 trays" → "Breast 500": {"pcs": 25}
-- "Return 1/6/2026" → "_date": "2026-06-01"
+KNOWN PRODUCT NAMES (match exactly):
+${allProds}
 
-Return ONLY valid JSON, no markdown:
-{"_date":"2026-06-01","Thigh 500":{"pcs":34},"Wings 500":{"pcs":9},"Bone":{"kg":216}}
+RULES:
+1. If value is in "KG" column → {"kg": value}
+2. If value is in "Pcs" column OR product name ends with "500" or "FF" → {"pcs": value}
+3. Products ending in "500" or "FF" are 500g packs — use pcs
+4. IGNORE empty cells (no value written)
+5. Date field (top of form) → "_date": "YYYY-MM-DD"
+6. Driver/Supplier field → "_driver": "name"
+7. For Receivables forms: also extract CTN table:
+   - "_ctns": {"1300": 57, "1400": 12} (size in grams → count)
+   - "_cwc": [{"ctns": 12, "gross": 178.5}, ...] (CWC batches)
+8. Match product names case-insensitively, allow minor spelling differences
 
-Analyze the image now:`;
+Return ONLY valid JSON, no markdown, no explanation:
+{"_date":"2026-06-01","_driver":"Ahmed","Chicken":{"kg":920},"Breast":{"kg":500},"Thigh 500":{"pcs":34},"_ctns":{"1300":57}}`;
     let result;
     if(prov==='gemini'){
       const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,{
@@ -1183,10 +1186,27 @@ Analyze the image now:`;
     // Fill form fields
     let filledCount=0;
     if(result._date&&S.record){S.record.date=result._date;filledCount++;}
+    if(result._driver&&S.record){
+      S.record.notes=(S.record.notes||'').replace(/\s*—.*$/,'').trim()+' — '+result._driver;
+      filledCount++;
+    }
+    // CTN sizes from form
+    if(result._ctns&&S.tab==='receivables'&&S.record){
+      S.record.ctns=S.record.ctns||{};
+      Object.entries(result._ctns).forEach(([sz,cnt])=>{
+        if(parseFloat(cnt)>0){S.record.ctns[sz]=parseFloat(cnt);filledCount++;}
+      });
+      recalcChickenFromCTN();
+    }
+    // CWC data from form
+    if(result._cwc&&Array.isArray(result._cwc)&&S.record){
+      CWC_ROWS=result._cwc.map((row,i)=>({id:i+1,sh:row.sh||'',ctns:String(row.ctns||''),gross:String(row.gross||''),cwt:''}));
+      CWC_ID=CWC_ROWS.length;
+      showToast('⚖️ CWC data loaded from form');
+    }
     Object.entries(result).forEach(([prod,vals])=>{
-      if(prod==='_date')return;
+      if(prod.startsWith('_'))return;
       if(!S.record||!S.record.items)return;
-      // Try exact match first, then case-insensitive
       let key=PRODUCTS.find(p=>p===prod)||PRODUCTS.find(p=>p.toLowerCase()===prod.toLowerCase());
       if(!key)return;
       if(!S.record.items[key])S.record.items[key]={kg:'',pcs:''};
@@ -1194,8 +1214,8 @@ Analyze the image now:`;
       if(vals.pcs&&parseFloat(vals.pcs)>0){S.record.items[key].pcs=String(vals.pcs);filledCount++;}
     });
     render();
-    if(filledCount>0){showToast('✅ Scanned '+filledCount+' values! Please verify.');}
-    else{alert('⚠️ AI scanned the image but found no matching products.\n\nMake sure the image shows product names and quantities clearly.');}
+    if(filledCount>0)showToast('✅ Scanned '+filledCount+' values — verify before saving');
+    else alert('⚠️ ما لاقى قيم — تأكد الصورة واضحة والأرقام مقروءة');
   }catch(e){
     if(e.message.includes('quota')||e.message.includes('429')||e.message.includes('exceeded')){
       alert('⚠️ تجاوزت الحد المجاني — انتظر دقيقة وحاول ثاني');

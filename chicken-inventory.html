@@ -359,7 +359,7 @@ function renderList(){
     <div><h2 style="margin:0;font-size:16px;color:${inf.color}">${inf.emoji} ${inf.ar}</h2>
     <p style="margin:2px 0 0;color:#78909C;font-size:11px">${recs.length} record(s)${filtered?' (filtered)':''}</p></div>
     <div style="display:flex;gap:5px;flex-wrap:wrap">
-      ${S.tab==='receivables'?`<button class="btn" style="background:#7B1FA2;color:#fff;padding:6px 11px;font-size:11px" onclick="S.view='receipt';render()">📋 Receipt</button>`:''}
+      ${S.tab==='receivables'?`<button class="btn" style="background:#7B1FA2;color:#fff;padding:6px 11px;font-size:11px" onclick="CWC_EXPECTED=0;CWC_ROWS=[{id:1,sh:'',ctns:'',gross:'',cwt:''}];CWC_ID=1;S.view='receipt';render()">📋 Receipt</button>`:''}
       <button class="btn" style="background:${inf.color};color:#fff;padding:7px 16px" onclick="startNew()">+ New ${inf.ar}</button>
     </div></div>`;
   if(!recs.length){
@@ -1272,8 +1272,11 @@ function showCartonCalc(recId){
     <div id="cwc-rows"></div>
     <button onclick="addCWCRow()" style="width:100%;padding:8px;background:#FFF3E0;color:#E65100;border:1px dashed #FFB74D;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;margin-bottom:10px">+ Add another batch</button>
     <div id="cwc-total" style="background:#E0F2F1;border-radius:9px;padding:10px;margin-bottom:10px"></div>
-    <div style="margin-bottom:10px"><div style="font-size:10px;color:#90A4AE;margin-bottom:3px">Compare with receipt total (KG)</div>
-      <input id="cwc-cmp" class="fi" type="number" step="any" placeholder="Auto from receipt" style="width:100%;font-size:12px;background:#E8F5E9" readonly></div>
+    <div style="margin-bottom:10px">
+      <div style="font-size:10px;color:#90A4AE;margin-bottom:3px">Compare with receipt total (KG)</div>
+      <input id="cwc-cmp" class="fi" type="number" step="any" placeholder="Auto from receipt"
+        style="width:100%;font-size:13px;font-weight:700;background:#E8F5E9"
+        oninput="CWC_EXPECTED=parseFloat(this.value)||0;updCWCTotal()"></div>
     <div id="cwc-diff" style="display:none;border-radius:8px;padding:10px;margin-bottom:10px;text-align:center"></div>
     <button onclick="saveCWCAndClose()" style="width:100%;padding:10px;background:#263238;color:#fff;border:none;border-radius:9px;cursor:pointer;font-size:13px;font-weight:600">✅ Done & Save</button>
   </div>`;
@@ -2879,14 +2882,25 @@ async function odLoadClick(){
 async function odSaveExec(token){
   showToast('☁️ Saving to OneDrive...');
   try{
+    const body=getBackupData();
+    // Save main backup file
     const resp=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/IAT-Inventory/IAT-Inventory-Backup.json:/content',{
       method:'PUT',
       headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
-      body:getBackupData()
+      body
     });
     if(resp.status===401){localStorage.removeItem('od-at');odLogin('save');return;}
     if(!resp.ok)throw new Error('HTTP '+resp.status);
-    showToast('✅ Saved to OneDrive/IAT-Inventory/');
+
+    // Also save dated backup copy
+    const today=new Date().toISOString().split('T')[0];
+    const datedName=`IAT-Inventory-Backup-${today}.json`;
+    await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/IAT-Inventory/${datedName}:/content`,{
+      method:'PUT',
+      headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+      body
+    });
+    showToast('✅ Saved! + Backup: '+datedName);
   }catch(e){alert('Save error: '+e.message);}
 }
 

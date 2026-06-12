@@ -194,7 +194,8 @@ function lookupStockMap(name){const k=name.toUpperCase().trim();return SMD.find(
 let S={tab:'inventory',view:'list',record:null,search:'',expanded:new Set(),
        stab:'products',mapSearch:'',smSearch:'',mapEdit:null,smEdit:null,
        recFilter:'all',faFilter:'all',fbFilter:'all',faFrom:'',faTo:'',fbFrom:'',fbTo:'',
-       listFrom:'',listTo:'',gFrom:'',gTo:''};
+       listFrom:'',listTo:'',gFrom:'',gTo:'',
+       faShowDetail:false,fbShowDetail:false};
 let D={inventories:[],receivables:[],returns:[],sales:[],stockSummaries:[],waste:[]};
 let FA=[],FB=[];
 let UP ={step:'upload',fileName:'',date:'',rows:[],converted:{},unmatched:[]};
@@ -238,7 +239,7 @@ const REC_TYPE_MAP={inventories:'inventory',receivables:'receivables',returns:'r
 function findRecord(id){
   for(const[key,type] of Object.entries(REC_TYPE_MAP)){
     const r=(D[key]||[]).find(r=>r.id===id);
-    if(r)return{record:r,type};
+    if(r)return{record:r,type,key:type}; // key = type value (inventory/receivables/etc)
   }return null;
 }
 function getRecordLabel(id,short=false){
@@ -258,6 +259,84 @@ function calcFormula(ops){
       tot[p].pcs+=sign*(parseFloat(f.record.items?.[p]?.pcs)||0);
     });
   });return tot;
+}
+
+function renderFormulaDetail(fid){
+  const fa=fid==='a'?FA:FB;
+  const fcolor=fid==='a'?'#4527A0':'#00695C';
+  const fname=fid==='a'?'Formula A':'Formula B';
+  const ops=fa.filter(op=>op.op!=='skip');
+  if(!ops.length)return`<div style="color:#90A4AE;font-size:12px;padding:8px">No records in ${fname}</div>`;
+
+  // Build record columns
+  const cols=ops.map(op=>{
+    const f=findRecord(op.id);if(!f)return null;
+    const sign=op.op==='+'?1:-1;
+    const sup=(f.record.notes||'').replace(/Receivables|Inventory|Returns|Waste|Sales/gi,'').replace(/[—\-]/,'').trim().slice(0,12);
+    const typeInfo={
+      inventory:{emoji:'📦',name:'Inventory'},
+      receivables:{emoji:'📥',name:'Receivables'},
+      returns:{emoji:'🔄',name:'Returns'},
+      sales:{emoji:'📤',name:'Sales'},
+      stocksummary:{emoji:'📊',name:'Sys.Stock'},
+      waste:{emoji:'♻️',name:'Waste'}
+    };
+    const ti2=typeInfo[f.key]||{emoji:'📋',name:f.key};
+    return{op,f,sign,typeEmoji:ti2.emoji,typeName:ti2.name,date:f.record.date.slice(5),sup:(f.record.notes||'').replace(/Receivables|Inventory|Returns|Waste|Sales/gi,'').replace(/[—\-]/g,'').trim().slice(0,12)};
+  }).filter(Boolean);
+
+  // Active products only
+  const activeProd=PRODUCTS.filter(p=>!FORMULA_EXCLUDED.includes(p)&&cols.some(({f})=>{
+    return(parseFloat(f.record.items?.[p]?.kg)||0)+(parseFloat(f.record.items?.[p]?.pcs)||0)>0;
+  }));
+
+  const stickyTh='position:sticky;left:0;z-index:2;background:#263238;padding:6px 8px;white-space:nowrap;font-size:10px;font-weight:700;color:#fff;min-width:110px;border-right:2px solid rgba(255,255,255,.3);text-align:left';
+  const colTh=`text-align:center;padding:5px 6px;font-size:9px;font-weight:700;color:#fff;background:${fcolor};min-width:60px;border-right:1px solid rgba(255,255,255,.2);white-space:pre-line;line-height:1.3`;
+  const totTh=`text-align:center;padding:5px 6px;font-size:10px;font-weight:800;color:#fff;background:#263238;min-width:65px;white-space:nowrap`;
+  const stickyTd=(txt,bg='#FAFAFA')=>`position:sticky;left:0;z-index:1;background:${bg};padding:5px 8px;font-size:11px;font-weight:600;color:#455A64;border-right:2px solid #E0E0E0;border-bottom:1px solid #F0F0F0;white-space:nowrap`;
+
+  let h=`<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:8px;border:1px solid #E0E0E0">
+  <table style="border-collapse:collapse;table-layout:fixed;font-size:11px">
+    <thead><tr>
+      <th style="${stickyTh}">Product</th>
+      ${cols.map(({sign,typeEmoji,typeName,date,sup})=>`<th style="${colTh}">
+        <div style="font-size:15px;margin-bottom:1px">${typeEmoji}</div>
+        <div style="font-size:9px;color:rgba(255,255,255,.75);margin-bottom:2px">${typeName}</div>
+        <div style="color:${sign>0?'#A5D6A7':'#FFCC80'};font-size:13px;font-weight:800;margin-bottom:1px">${sign>0?'+':'−'}</div>
+        <div style="font-size:9px;color:rgba(255,255,255,.9)">${date}</div>
+        ${sup?`<div style="font-size:8px;color:rgba(255,255,255,.6);margin-top:1px">${sup}</div>`:''}
+      </th>`).join('')}
+      <th style="${totTh}">Total</th>
+    </tr></thead>
+    <tbody>
+    ${activeProd.map((p,pi)=>{
+      const is500=p.endsWith(' 500');
+      const rowBg=pi%2===0?'#fff':'#FAFAFA';
+      const totVal=cols.reduce((s,{f,sign})=>{
+        const kg=parseFloat(f.record.items?.[p]?.kg)||0;
+        const pcs=parseFloat(f.record.items?.[p]?.pcs)||0;
+        return s+sign*(kg+pcs*0.5);
+      },0);
+      return`<tr>
+        <td style="${stickyTd(p,rowBg)}">
+          ${is500?`<span style="color:#9C27B0;font-size:10px">↗ ${p}</span>`:`<span>${p}</span>`}
+        </td>
+        ${cols.map(({f,sign})=>{
+          const kg=parseFloat(f.record.items?.[p]?.kg)||0;
+          const pcs=parseFloat(f.record.items?.[p]?.pcs)||0;
+          const val=kg+pcs*0.5;
+          if(val===0)return`<td style="text-align:center;padding:5px 6px;color:#E0E0E0;border-bottom:1px solid #F0F0F0;border-right:1px solid #F0F0F0;background:${rowBg}">—</td>`;
+          const disp=sign>0?'+'+val.toFixed(val%1===0?0:2):'-'+val.toFixed(val%1===0?0:2);
+          return`<td style="text-align:center;padding:5px 6px;font-weight:700;color:${sign>0?'#2E7D32':'#C62828'};background:${sign>0?'#F1F8E9':'#FFF3E0'};border-bottom:1px solid #F0F0F0;border-right:1px solid #F0F0F0">${disp}</td>`;
+        }).join('')}
+        <td style="text-align:center;padding:5px 7px;font-weight:800;font-size:12px;color:${totVal>0?'#1565C0':totVal<0?'#C62828':'#90A4AE'};background:${totVal>0?'#E3F2FD':totVal<0?'#FFEBEE':'#F5F5F5'};border-bottom:1px solid #F0F0F0">
+          ${totVal===0?'—':(totVal>0?'+':'')+totVal.toFixed(totVal%1===0?0:2)}
+        </td>
+      </tr>`;
+    }).join('')}
+    </tbody>
+  </table></div>`;
+  return h;
 }
 function allRecords(){
   const arr=[];
@@ -1500,7 +1579,12 @@ function renderFormula(fid){
   let h=`<div class="card" style="border:1.5px solid ${fid==='a'?'#B39DDB':'#80CBC4'}">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
       <h2 style="margin:0;font-size:16px;color:${fcolor}">🧮 ${fname}</h2>
-      ${fa.length?`<button class="btn" style="background:#ECEFF1;color:#C62828;font-size:11px" onclick="${fid==='a'?'FA=[]':'FB=[]'};saveFormulas();render()">Clear All</button>`:''}
+      ${fa.length?`<div style="display:flex;gap:5px">
+        <button class="btn" style="background:#E8EAF6;color:${fcolor};font-size:11px" onclick="S.${fid==='a'?'faShowDetail':'fbShowDetail'}=!S.${fid==='a'?'faShowDetail':'fbShowDetail'};render()">
+          ${(fid==='a'?S.faShowDetail:S.fbShowDetail)?'📊 Hide Detail':'📊 Show Detail'}
+        </button>
+        <button class="btn" style="background:#ECEFF1;color:#C62828;font-size:11px" onclick="${fid==='a'?'FA=[]':'FB=[]'};saveFormulas();render()">Clear All</button>
+      </div>`:''}
     </div>
     <!-- Current formula display -->
     ${fa.length?`<div style="margin-bottom:10px">
@@ -1576,6 +1660,12 @@ function renderFormula(fid){
           <button class="btn" style="background:#25D366;color:#fff;padding:4px 10px;font-size:11px" onclick="shareFormulaWhatsApp('${fid}')">💬 WhatsApp</button>
         </div>
       </div>
+      ${(fid==='a'?S.faShowDetail:S.fbShowDetail)?`
+      <div style="margin-bottom:12px">
+        <div style="font-size:11px;font-weight:700;color:${fcolor};margin-bottom:6px">📋 Detailed Breakdown — ${fname}</div>
+        ${renderFormulaDetail(fid)}
+      </div>
+      <hr style="border:none;border-top:1px solid #ECEFF1;margin-bottom:12px">`:''}
       ${renderFT(totals)}
     </div>`;
   }

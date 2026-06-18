@@ -97,7 +97,7 @@ let SH_DATA=[];
 function loadSH(){try{const s=localStorage.getItem(SK_SH);SH_DATA=s?JSON.parse(s):JSON.parse(JSON.stringify(DEFAULT_SH));}catch{SH_DATA=JSON.parse(JSON.stringify(DEFAULT_SH));}}
 function saveSH(){localStorage.setItem(SK_SH,JSON.stringify(SH_DATA));}
 
-let RC={supplier:'',date:new Date().toISOString().split('T')[0],temp:'',ctns:{},sizePcs:{},smallPcs:10,largePcs:8,cuts:{}};
+let RC={supplier:'',date:new Date().toISOString().split('T')[0],temp:'',ctns:{},sizePcs:{},smallPcs:10,largePcs:8,cuts:{},extraItems:{}};
 let CWC_ROWS=[{id:1,sh:'',ctns:'',gross:'',cwt:''}];
 let CWC_ID=1;
 let CWC_EXPECTED=0;
@@ -195,7 +195,8 @@ let S={tab:'inventory',view:'list',record:null,search:'',expanded:new Set(),
        stab:'products',mapSearch:'',smSearch:'',mapEdit:null,smEdit:null,
        recFilter:'all',faFilter:'all',fbFilter:'all',faFrom:'',faTo:'',fbFrom:'',fbTo:'',
        listFrom:'',listTo:'',gFrom:'',gTo:'',
-       faShowDetail:false,fbShowDetail:false};
+       faShowDetail:false,fbShowDetail:false,
+       _prodNWC:{}}; // per-product NWC batches
 let D={inventories:[],receivables:[],returns:[],sales:[],stockSummaries:[],waste:[]};
 let FA=[],FB=[];
 let UP ={step:'upload',fileName:'',date:'',rows:[],converted:{},unmatched:[]};
@@ -438,8 +439,7 @@ function renderList(){
     <div><h2 style="margin:0;font-size:16px;color:${inf.color}">${inf.emoji} ${inf.ar}</h2>
     <p style="margin:2px 0 0;color:#78909C;font-size:11px">${recs.length} record(s)${filtered?' (filtered)':''}</p></div>
     <div style="display:flex;gap:5px;flex-wrap:wrap">
-      ${S.tab==='receivables'?`<button class="btn" style="background:#7B1FA2;color:#fff;padding:6px 11px;font-size:11px" onclick="CWC_EXPECTED=0;CWC_ROWS=[{id:1,sh:'',ctns:'',gross:'',cwt:''}];CWC_ID=1;S.view='receipt';render()">📋 Receipt</button>`:''}
-      <button class="btn" style="background:${inf.color};color:#fff;padding:7px 16px" onclick="startNew()">+ New ${inf.ar}</button>
+      ${S.tab==='receivables'?`<button class="btn" style="background:#2E7D32;color:#fff;padding:7px 16px" onclick="CWC_EXPECTED=0;CWC_ROWS=[{id:1,sh:'',ctns:'',gross:'',cwt:''}];CWC_ID=1;RC={supplier:'',date:RC.date||new Date().toISOString().split('T')[0],temp:'',ctns:{},sizePcs:{},smallPcs:10,largePcs:8,cuts:{},extraItems:{}};S.view='receipt';render()">📥 + New Receivables</button>`:`<button class="btn" style="background:${inf.color};color:#fff;padding:7px 16px" onclick="startNew()">+ New ${inf.ar}</button>`}
     </div></div>`;
   if(!recs.length){
     h+=`<div class="empty" style="border:2px dashed ${inf.border}"><div style="font-size:36px;margin-bottom:7px">${inf.emoji}</div>
@@ -571,9 +571,10 @@ function renderForm(){
 }
 
 // ─── Product Table (compact 4-col) ───────────────
-function renderPT(items,readOnly,srch){
+function renderPT(items,readOnly,srch,excludeChicken=false){
   const s=srch.toLowerCase();
   let vis=PRODUCTS.filter(p=>!s||p.toLowerCase().includes(s));
+  if(excludeChicken)vis=vis.filter(p=>p!=='Chicken');
   if(readOnly) vis=vis.filter(p=>getVal(items,p)>0);
   const tKg=PRODUCTS.reduce((a,p)=>a+(parseFloat(items[p]?.kg)||0),0);
   const tComb=PARENT_PRODUCTS.reduce((s,p)=>s+getTotalKg(items,p),0);
@@ -607,7 +608,20 @@ function renderPT(items,readOnly,srch){
     const nameHtml=is500?`<div style="color:#7B1FA2;font-size:11px;word-break:break-word">${p}</div><div style="color:#B0BEC5;font-size:9px">↗ ${C_MAP[p]}</div>`:`<div style="font-weight:${hv?700:400};color:${hv?'#1B5E20':'#37474F'};font-size:11px;word-break:break-word">${p}</div>`;
     let qtyHtml='';
     if(readOnly){qtyHtml=hv?`<div style="text-align:center;font-weight:700;color:${uc}">${raw}<span style="font-size:9px;opacity:.7"> ${ul}</span></div>`:`<div style="text-align:center;color:#CFD8DC">—</div>`;}
-    else{qtyHtml=`<div style="display:flex;align-items:center;gap:2px"><input type="number" min="0" step="any" style="width:100%;padding:4px 3px;border:1.5px solid ${hv?(is500?'#CE93D8':'#81C784'):'#E0E0E0'};border-radius:5px;text-align:center;font-size:11px;outline:none;background:${hv?(is500?'#F8F0FF':'#F9FBE7'):'#fff'};font-family:inherit" value="${raw}" placeholder="0" data-prod="${p}" data-field="${field}" oninput="updItem('${p.replace(/'/g,"\\'")}','${field}',this)"><span style="font-size:9px;color:${uc};font-weight:700;min-width:14px;flex-shrink:0">${ul}</span></div>`;}
+    else{
+      const hasPNWC=S._prodNWC&&S._prodNWC[p]&&S._prodNWC[p].length;
+      const nwcBtn=!is500?`<button onclick="showProdNWC('${p.replace(/'/g,"\\'")}');event.preventDefault()"
+        style="border:none;background:${hasPNWC?'#E65100':'#ECEFF1'};color:${hasPNWC?'#fff':'#78909C'};border-radius:5px;padding:3px 5px;cursor:pointer;font-size:11px;flex-shrink:0;min-width:22px;min-height:26px"
+        title="Net Weight Calculator">⚖️</button>`:'';
+      qtyHtml=`<div style="display:flex;align-items:center;gap:2px">
+        <input type="text" inputmode="decimal" min="0" step="any"
+          style="width:100%;padding:4px 3px;border:1.5px solid ${hv?(is500?'#CE93D8':'#81C784'):'#E0E0E0'};border-radius:5px;text-align:center;font-size:11px;outline:none;background:${hv?(is500?'#F8F0FF':'#F9FBE7'):'#fff'};font-family:inherit"
+          value="${raw}" placeholder="0" data-prod="${p}" data-field="${field}"
+          oninput="updItem('${p.replace(/'/g,"\\'")}','${field}',this)">
+        <span style="font-size:9px;color:${uc};font-weight:700;min-width:14px;flex-shrink:0">${ul}</span>
+        ${nwcBtn}
+      </div>`;
+    }
     let combHtml='<td style="background:#F5FAFA"></td>';
     if(!is500){const ck=getTotalKg(items,p);const fp=ck-(parseFloat(items[p]?.kg)||0);combHtml=`<td id="tk-${pidx}" style="padding:4px 4px;text-align:center;background:${ck>0?'#E0F2F1':'#F5FAFA'}">${ck>0?`<div style="font-weight:700;color:#00695C;font-size:12px">${ck.toFixed(2)}</div>${fp>0?`<div style="font-size:9px;color:#2E7D32">+${fp.toFixed(2)}</div>`:''}`:`<span style="color:#CFD8DC">—</span>`}</td>`;}
     h+=`<tr style="background:${is500?'#FDF8FF':(hv?'#F9FBE7':i%2===0?'#fff':'#FAFAFA')};border-bottom:1px solid #F0F0F0"><td style="padding:4px 3px;color:#BDBDBD;font-size:9px;text-align:center">${pidx+1}</td><td style="padding:4px 5px">${nameHtml}</td><td style="padding:3px 4px">${qtyHtml}</td>${combHtml}</tr>`;
@@ -742,27 +756,32 @@ function renderReceiptCalc(){
       <span class="badge" style="background:#E0F2F1;color:#00695C;font-size:12px;font-weight:700">Total: <b id="rc-grand">${t.grand.toFixed(2)}</b> KG</span>
     </div>
   </div>
-  <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
-    <div style="flex:1;min-width:185px"><div class="card">
+  <div style="flex:1;min-width:185px"><div class="card">
       <div style="font-size:11px;font-weight:700;color:#1565C0;margin-bottom:7px">🐔 Whole Chicken (CTN)</div>
       ${sizeHTML}
     </div></div>
-    <div style="flex:1;min-width:175px"><div class="card">
-      <div style="font-size:11px;font-weight:700;color:#C62828;margin-bottom:7px">✂️ Cut Products</div>
-      ${cutHTML}
-    </div></div>
+  </div>
+  <div class="card" style="margin-top:6px;padding:10px">
+    <div style="font-size:11px;font-weight:700;color:#37474F;margin-bottom:6px">📦 Products</div>
+    ${renderPT(RC.extraItems||{},false,'',true)}
   </div>`;
 }
 function saveReceiptAsRec(){
   const t=getRCTotals();
-  if(t.grand===0){alert('No data entered!');return;}
+  if(t.chickenKG===0&&!Object.keys(RC.extraItems||{}).length){alert('No data entered!');return;}
   const items=emptyItems();
   if(t.chickenKG>0)items['Chicken']={kg:t.chickenKG.toFixed(3),pcs:''};
-  CUT_PRODUCTS.forEach(c=>{
-    const v=parseFloat(RC.cuts[c.key])||0;if(!v)return;
-    if(c.unit==='pcs')items[c.prod]={kg:'',pcs:v.toFixed(0)};
-    else items[c.prod]={kg:v.toFixed(3),pcs:''};
-  });
+  // Merge extraItems FIRST (before building r)
+  if(RC.extraItems){
+    Object.entries(RC.extraItems).forEach(([p,v])=>{
+      const kg=parseFloat(v.kg)||0;const pcs=parseFloat(v.pcs)||0;
+      if(kg>0||pcs>0){
+        if(!items[p])items[p]={kg:'',pcs:''};
+        if(kg>0)items[p].kg=v.kg;
+        if(pcs>0)items[p].pcs=v.pcs;
+      }
+    });
+  }
   // Save non-empty CTN sizes
   const ctns={};Object.entries(RC.ctns).forEach(([s,v])=>{if(parseFloat(v)>0)ctns[s]=parseFloat(v);});
   // Save CWC verification if available
@@ -796,7 +815,7 @@ function saveReceiptAsRec(){
     D.receivables=[r,...D.receivables];
   }
   save();
-  RC={supplier:'',date:new Date().toISOString().split('T')[0],temp:'',ctns:{},sizePcs:{},largePcs:8,cuts:{}};
+  RC={supplier:'',date:new Date().toISOString().split('T')[0],temp:'',ctns:{},sizePcs:{},largePcs:8,cuts:{},extraItems:{}};
   S.view='list';render();showToast(_editRecId?'✅ Record updated!':'✅ Receipt saved as Receivable!');
   _editRecId=null;
 }
@@ -862,7 +881,7 @@ function renderNWCRows(){
       <div style="display:flex;gap:6px;margin-bottom:6px">
         <div style="flex:1">
           <div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Count</div>
-          <input class="fi" type="tel" inputmode="decimal" id="nwc-cnt-${row.id}" placeholder="0" value="${row.count}"
+          <input class="fi" type="text" inputmode="decimal" id="nwc-cnt-${row.id}" placeholder="0" value="${row.count}"
             style="width:100%;font-size:14px;font-weight:700;text-align:center"
             oninput="setNWC(${row.id},'count',this.value)"
             onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('nwc-gross-${row.id}')?.focus();}">
@@ -882,7 +901,7 @@ function renderNWCRows(){
       <div style="display:flex;gap:6px">
         <div style="flex:1">
           <div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Gross Weight (KG)</div>
-          <input class="fi" type="tel" inputmode="decimal" id="nwc-gross-${row.id}" placeholder="0.000" value="${row.gross}"
+          <input class="fi" type="text" inputmode="decimal" id="nwc-gross-${row.id}" placeholder="0.000" value="${row.gross}"
             style="width:100%;font-size:14px;font-weight:700;text-align:center"
             oninput="setNWC(${row.id},'gross',this.value)"
             onkeydown="if(event.key==='Enter'){event.preventDefault();addNWCRow();}">
@@ -952,7 +971,7 @@ function buildNWCRowEl(row,idx){
     <div style="display:flex;gap:6px;margin-bottom:6px">
       <div style="flex:1">
         <div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Count</div>
-        <input class="fi" type="tel" inputmode="decimal" id="nwc-cnt-${row.id}" placeholder="0" value="${row.count}"
+        <input class="fi" type="text" inputmode="decimal" id="nwc-cnt-${row.id}" placeholder="0" value="${row.count}"
           style="width:100%;font-size:15px;font-weight:700;text-align:center"
           oninput="setNWC(${row.id},'count',this.value)"
           onkeydown="if(event.key==='Enter'||event.key==='Tab'){event.preventDefault();document.getElementById('nwc-gross-${row.id}')?.focus();}">
@@ -967,7 +986,7 @@ function buildNWCRowEl(row,idx){
     <div style="display:flex;gap:6px">
       <div style="flex:1">
         <div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Gross (KG)</div>
-        <input class="fi" type="tel" inputmode="decimal" id="nwc-gross-${row.id}" placeholder="0.000" value="${row.gross}"
+        <input class="fi" type="text" inputmode="decimal" id="nwc-gross-${row.id}" placeholder="0.000" value="${row.gross}"
           style="width:100%;font-size:15px;font-weight:700;text-align:center"
           oninput="setNWC(${row.id},'gross',this.value)"
           onkeydown="if(event.key==='Enter'){event.preventDefault();addNWCRow();}">
@@ -1027,6 +1046,166 @@ function fallbackCopy(txt){
   try{document.execCommand('copy');showToast('📋 Copied: '+txt+' KG');}
   catch(e){showToast('اضغط مطولاً على الرقم ونسخه يدوياً');}
   document.body.removeChild(inp);
+}
+
+// ─── Per-Product Net Weight Calculator ───────────
+function showProdNWC(prod){
+  document.getElementById('pnwc-modal')?.remove();
+  // Init rows from saved state or fresh
+  if(!S._prodNWC)S._prodNWC={};
+  if(!S._prodNWC[prod])S._prodNWC[prod]=[{id:1,count:'',type:'salle',gross:'',cwt:''}];
+  const rows=S._prodNWC[prod];
+  const m=document.createElement('div');
+  m.id='pnwc-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:flex-end';
+  m.innerHTML=`<div style="background:#fff;width:100%;border-radius:16px 16px 0 0;padding:15px;max-height:88vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div>
+        <div style="font-size:14px;font-weight:800;color:#E65100">⚖️ ${prod}</div>
+        <div style="font-size:10px;color:#90A4AE">Net Weight Calculator</div>
+      </div>
+      <button onclick="document.getElementById('pnwc-modal').remove()" style="border:none;background:none;font-size:22px;cursor:pointer;color:#90A4AE">×</button>
+    </div>
+    <div id="pnwc-rows"></div>
+    <button onclick="addPNWCRow('${prod.replace(/'/g,"\\'")}');event.preventDefault()"
+      style="width:100%;padding:8px;border:1.5px dashed #FFB74D;background:#FFF8E1;border-radius:9px;cursor:pointer;font-size:13px;color:#E65100;margin-bottom:10px">+ Add Batch</button>
+    <div style="background:#E8F5E9;border-radius:10px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:700;color:#455A64">Total Net:</span>
+      <span id="pnwc-total" style="font-size:22px;font-weight:900;color:#2E7D32">0.000 KG</span>
+    </div>
+    <button onclick="applyPNWCTotal('${prod.replace(/'/g,"\\'")}');event.preventDefault()"
+      style="width:100%;padding:11px;background:#1B5E20;color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:14px;font-weight:700">✅ Apply to ${prod}</button>
+  </div>`;
+  document.body.appendChild(m);
+  renderPNWCRows(prod);
+}
+
+function getPNWCTotal(prod){
+  return(S._prodNWC[prod]||[]).reduce((s,r)=>{
+    const wt=getNWCWt(r);
+    const gross=parseFloat(r.gross)||0;
+    const cnt=parseFloat(r.count)||0;
+    return s+(gross>0?gross-cnt*wt:0);
+  },0);
+}
+
+function renderPNWCRows(prod){
+  const cont=document.getElementById('pnwc-rows');if(!cont)return;
+  const rows=S._prodNWC[prod]||[];
+  cont.innerHTML=rows.map((row,i)=>{
+    const wt=getNWCWt(row);
+    const gross=parseFloat(row.gross)||0;
+    const cnt=parseFloat(row.count)||0;
+    const net=gross>0?gross-cnt*wt:0;
+    return`<div style="border:1px solid #ECEFF1;border-radius:10px;padding:10px;margin-bottom:8px;background:#FAFAFA">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:11px;font-weight:700;color:#E65100">Batch ${i+1}</span>
+        ${rows.length>1?`<button onclick="delPNWCRow('${prod.replace(/'/g,"\\'")}',${row.id});event.preventDefault()"
+          style="border:none;background:#FFEBEE;color:#C62828;border-radius:6px;padding:3px 9px;cursor:pointer;font-size:12px">🗑</button>`:''}
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <div style="flex:1"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Count</div>
+          <input class="fi" type="text" inputmode="decimal" id="pnwc-cnt-${row.id}" value="${row.count}" placeholder="0"
+            style="width:100%;font-size:15px;font-weight:700;text-align:center"
+            oninput="setPNWC('${prod.replace(/'/g,"\\'")}',${row.id},'count',this.value)"
+            onkeydown="if(event.key==='Enter'||event.key==='Tab'){event.preventDefault();document.getElementById('pnwc-gross-${row.id}')?.focus();}">
+        </div>
+        <div style="flex:2"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Container</div>
+          <select class="fi" tabindex="-1" style="width:100%;font-size:11px"
+            onchange="setPNWC('${prod.replace(/'/g,"\\'")}',${row.id},'type',this.value);renderPNWCRows('${prod.replace(/'/g,"\\'")}')"}>
+            ${NWC_TYPES.map(t=>`<option value="${t.key}"${t.key===row.type?' selected':''}>${t.label}${t.wt>0?' ('+t.wt+')':''}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <div style="flex:1"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Gross (KG)</div>
+          <input class="fi" type="text" inputmode="decimal" id="pnwc-gross-${row.id}" value="${row.gross}" placeholder="0.000"
+            style="width:100%;font-size:15px;font-weight:700;text-align:center"
+            oninput="setPNWC('${prod.replace(/'/g,"\\'")}',${row.id},'gross',this.value)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();addPNWCRow('${prod.replace(/'/g,"\\'")}');}">
+        </div>
+        <div style="flex:1"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Net (KG)</div>
+          <div id="pnwc-net-${row.id}" style="background:${net>0?'#E8F5E9':'#F5F5F5'};border-radius:7px;padding:8px;text-align:center;font-size:14px;font-weight:800;color:${net>0?'#2E7D32':'#90A4AE'}">
+            ${net>0?net.toFixed(3):'—'}
+          </div>
+        </div>
+      </div>
+      <div id="pnwc-fml-${row.id}" style="font-size:9px;color:#90A4AE;margin-top:3px;text-align:right">${net>0&&wt>0?`${gross}−(${cnt}×${wt})=${net.toFixed(3)}`:''}</div>
+    </div>`;
+  }).join('');
+  const tot=getPNWCTotal(prod);
+  const el=document.getElementById('pnwc-total');
+  if(el)el.textContent=tot.toFixed(3)+' KG';
+}
+
+function setPNWC(prod,id,field,val){
+  const rows=S._prodNWC[prod]||[];
+  const row=rows.find(r=>r.id===id);
+  if(row)row[field]=val;
+  // Update net for this row only (no re-render = keyboard stays open)
+  if(row){
+    const wt=getNWCWt(row);
+    const gross=parseFloat(row.gross)||0;
+    const cnt=parseFloat(row.count)||0;
+    const net=gross>0?gross-cnt*wt:0;
+    const netEl=document.getElementById('pnwc-net-'+id);
+    if(netEl){
+      netEl.textContent=net>0?net.toFixed(3):'—';
+      netEl.style.color=net>0?'#2E7D32':'#90A4AE';
+      netEl.style.background=net>0?'#E8F5E9':'#F5F5F5';
+    }
+    const fmlEl=document.getElementById('pnwc-fml-'+id);
+    if(fmlEl)fmlEl.textContent=net>0&&wt>0?`${gross}−(${cnt}×${wt})=${net.toFixed(3)}`:'';
+  }
+  // Update total
+  const tot=getPNWCTotal(prod);
+  const totEl=document.getElementById('pnwc-total');
+  if(totEl)totEl.textContent=tot.toFixed(3)+' KG';
+  saveDraft();
+}
+
+function delPNWCRow(prod,id){
+  S._prodNWC[prod]=(S._prodNWC[prod]||[]).filter(r=>r.id!==id);
+  renderPNWCRows(prod);
+  // Update ⚖️ button color
+  const btn=document.querySelector(`[data-pnwc="${prod}"]`);
+  if(btn){const has=(S._prodNWC[prod]||[]).length;btn.style.background=has?'#E65100':'#ECEFF1';btn.style.color=has?'#fff':'#78909C';}
+}
+
+let _pnwcId=1;
+function addPNWCRow(prod){
+  if(!S._prodNWC[prod])S._prodNWC[prod]=[];
+  const last=S._prodNWC[prod][S._prodNWC[prod].length-1];
+  _pnwcId++;
+  S._prodNWC[prod].push({id:_pnwcId,count:'',type:last?.type||'salle',gross:'',cwt:last?.cwt||''});
+  renderPNWCRows(prod);
+  setTimeout(()=>document.getElementById('pnwc-cnt-'+_pnwcId)?.focus(),30);
+}
+
+function applyPNWCTotal(prod){
+  const tot=getPNWCTotal(prod);
+  if(tot<=0){alert('الوزن الصافي صفر — أدخل البيانات أولاً');return;}
+
+  if(S.view==='receipt'){
+    // In receipt view → update RC.extraItems
+    if(!RC.extraItems)RC.extraItems={};
+    if(!RC.extraItems[prod])RC.extraItems[prod]={kg:'',pcs:''};
+    RC.extraItems[prod].kg=tot.toFixed(3);
+  } else if(S.record){
+    // In normal form → update S.record.items
+    if(!S.record.items)S.record.items={};
+    if(!S.record.items[prod])S.record.items[prod]={kg:'',pcs:''};
+    S.record.items[prod].kg=tot.toFixed(3);
+  }
+
+  document.getElementById('pnwc-modal')?.remove();
+  render();
+  // Update input directly after render
+  requestAnimationFrame(()=>{
+    const inp=document.querySelector(`[data-prod="${prod}"][data-field="kg"]`);
+    if(inp){inp.style.background='#FFFDE7';}
+  });
+  showToast('✅ '+prod+': '+tot.toFixed(3)+' KG');
 }
 function findProductKey(name,is500){
   const n=name.toLowerCase().trim();
@@ -1415,12 +1594,12 @@ function renderCWCRows(){
       ${row.sh==='custom'?`<div style="margin-bottom:6px"><input class="fi" type="tel" tabindex="-1" placeholder="Empty CTN weight KG" value="${row.cwt||''}" style="width:100%;font-size:11px" oninput="setCWCVal(${row.id},'cwt',this.value)" onblur="renderCWCRows()"></div>`:''}
       <div style="display:flex;gap:6px">
         <div style="flex:1"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">No. of CTN</div>
-          <input class="fi" type="tel" inputmode="decimal" id="cwc-ctn-${row.id}" tabindex="${t1}" placeholder="0" value="${row.ctns}" enterkeyhint="next"
+          <input class="fi" type="text" inputmode="decimal" id="cwc-ctn-${row.id}" tabindex="${t1}" placeholder="0" value="${row.ctns}" enterkeyhint="next"
             style="width:100%;font-size:13px;font-weight:700;text-align:center"
             oninput="setCWCVal(${row.id},'ctns',this.value)"
             onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('cwc-gross-${row.id}')?.focus();}"></div>
         <div style="flex:1"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Gross Weight (KG)</div>
-          <input class="fi" type="tel" inputmode="decimal" id="cwc-gross-${row.id}" tabindex="${t2}" placeholder="0.00" value="${row.gross}" enterkeyhint="next"
+          <input class="fi" type="text" inputmode="decimal" id="cwc-gross-${row.id}" tabindex="${t2}" placeholder="0.00" value="${row.gross}" enterkeyhint="next"
             style="width:100%;font-size:13px;font-weight:700;text-align:center"
             oninput="setCWCVal(${row.id},'gross',this.value);updCWCTotal()"
             onkeydown="if(event.key==='Enter'){event.preventDefault();addCWCRowFocus();}"></div>
@@ -1530,12 +1709,12 @@ function addCWCRowFocus(){
   <div style="margin-bottom:6px"><select tabindex="-1" class="fi" style="width:100%;font-size:11px" onchange="updCWCRow(${id},'sh',this.value)">${shOpts}</select></div>
   <div style="display:flex;gap:6px">
     <div style="flex:1"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">No. of CTN</div>
-      <input class="fi" type="tel" inputmode="decimal" id="cwc-ctn-${id}" tabindex="${t1}" placeholder="0" enterkeyhint="next"
+      <input class="fi" type="text" inputmode="decimal" id="cwc-ctn-${id}" tabindex="${t1}" placeholder="0" enterkeyhint="next"
         style="width:100%;font-size:13px;font-weight:700;text-align:center"
         oninput="setCWCVal(${id},'ctns',this.value)"
         onkeydown="if(event.key===\'Enter\'){event.preventDefault();document.getElementById(\'cwc-gross-${id}\')?.focus();}"></div>
     <div style="flex:1"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Gross Weight (KG)</div>
-      <input class="fi" type="tel" inputmode="decimal" id="cwc-gross-${id}" tabindex="${t2}" placeholder="0.00" enterkeyhint="next"
+      <input class="fi" type="text" inputmode="decimal" id="cwc-gross-${id}" tabindex="${t2}" placeholder="0.00" enterkeyhint="next"
         style="width:100%;font-size:13px;font-weight:700;text-align:center"
         oninput="setCWCVal(${id},'gross',this.value);updCWCTotal()"
         onkeydown="if(event.key===\'Enter\'){event.preventDefault();addCWCRowFocus();}"></div>
@@ -2070,23 +2249,27 @@ function formatDateShort(d){const[y,m,day]=d.split('-');return`${day}/${m}/${y}`
 function startNew(){
   const r=newRec();
   const inf=ti(S.tab);
-  r.notes=inf.ar; // just the type label, user sets date separately
+  r.notes=inf.ar;
+  S._prodNWC={};
   S.record=r;S.view='form';render();
 }
-function cancelForm(){S.view='list';S.record=null;S.search='';render();}
+function cancelForm(){S.view='list';S.record=null;S.search='';clearDraft();render();}
 let _editRecId=null;
 function editRec(id){
   const r=D[dk(S.tab)].find(x=>x.id===id);
   if(!r)return;
+  S._prodNWC={}; // reset per-product NWC on every edit
   if(S.tab==='receivables'){
     _editRecId=id;
     const sup=r.notes?r.notes.replace(/^Receivables\s*[—\-]\s*/,'').trim():'';
     RC={supplier:sup,date:r.date,temp:r.temp||'',ctns:{...(r.ctns||{})},
-        sizePcs:{...(r.sizePcs||{})},smallPcs:RC.smallPcs||10,largePcs:RC.largePcs||8,cuts:{}};
+        sizePcs:{...(r.sizePcs||{})},smallPcs:RC.smallPcs||10,largePcs:RC.largePcs||8,cuts:{},extraItems:{}};
+    // Load all items into extraItems (excluding chicken which comes from CTN)
     const items=expandItems(r.items);
-    CUT_PRODUCTS.forEach(c=>{
-      const it=items[c.prod];if(!it)return;
-      RC.cuts[c.key]=c.unit==='pcs'?(parseFloat(it.pcs)||0):(parseFloat(it.kg)||0);
+    Object.entries(items).forEach(([p,v])=>{
+      if(p==='Chicken')return; // handled by CTN
+      const kg=parseFloat(v.kg)||0;const pcs=parseFloat(v.pcs)||0;
+      if(kg>0||pcs>0)RC.extraItems[p]={kg:v.kg||'',pcs:v.pcs||''};
     });
     if(r.cwc&&r.cwc.rows){
       CWC_ROWS=r.cwc.rows.map((row,i)=>({id:i+1,sh:row.sh||'',ctns:String(row.ctns),gross:String(row.gross),cwt:''}));
@@ -2131,7 +2314,7 @@ function saveRec(){
   }
   const key=dk(S.tab);const i=D[key].findIndex(x=>x.id===r.id);
   if(i>=0)D[key][i]=r;else D[key]=[r,...D[key]];
-  save();S.view='list';S.record=null;S.search='';render();
+  clearDraft();save();S.view='list';S.record=null;S.search='';render();
 }
 function renderCTNEditRows(){
   const r=S.record;if(!r)return'';
@@ -2237,6 +2420,15 @@ function addCTNSize(){
 
 function updItem(p,f,el){
   const v=el.value;
+  // In receipt view, update RC.extraItems instead of S.record
+  if(S.view==='receipt'){
+    if(!RC.extraItems)RC.extraItems={};
+    if(!RC.extraItems[p])RC.extraItems[p]={kg:'',pcs:''};
+    RC.extraItems[p][f]=v;
+    el.style.borderColor=(parseFloat(v)||0)>0?(f==='pcs'?'#CE93D8':'#81C784'):'#E0E0E0';
+    el.style.background=(parseFloat(v)||0)>0?(f==='pcs'?'#F8F0FF':'#F9FBE7'):'#fff';
+    return;
+  }
   if(!S.record.items[p])S.record.items[p]={kg:'',pcs:''};
   S.record.items[p][f]=v;
   el.style.borderColor=(parseFloat(v)||0)>0?(f==='pcs'?'#CE93D8':'#81C784'):'#E0E0E0';
@@ -2251,6 +2443,42 @@ function updItem(p,f,el){
     cell.innerHTML=ck>0?`<div style="font-weight:700;color:#00695C;font-size:12px">${ck.toFixed(2)}</div>${fp>0?`<div style="font-size:9px;color:#2E7D32">+${fp.toFixed(2)}</div>`:''}`:`<span style="color:#CFD8DC">—</span>`;
     cell.style.background=ck>0?'#E0F2F1':'#F5FAFA';
   });
+  saveDraft(); // auto-save after every input
+}
+
+// ─── Draft Auto-Save ──────────────────────────────
+const SK_DRAFT='chk-draft';
+function saveDraft(){
+  if(!S.record||S.view!=='form')return;
+  try{
+    localStorage.setItem(SK_DRAFT,JSON.stringify({
+      tab:S.tab,record:S.record,prodNWC:S._prodNWC||{},
+      ts:Date.now()
+    }));
+  }catch(e){}
+}
+function clearDraft(){try{localStorage.removeItem(SK_DRAFT);}catch(e){}}
+function checkDraft(){
+  try{
+    const raw=localStorage.getItem(SK_DRAFT);
+    if(!raw)return;
+    const d=JSON.parse(raw);
+    if(!d.record||!d.tab)return;
+    // Only show if draft is less than 24h old
+    const age=Date.now()-d.ts;
+    if(age>86400000){clearDraft();return;}
+    const ageStr=age<60000?'just now':age<3600000?Math.round(age/60000)+'m ago':Math.round(age/3600000)+'h ago';
+    const ti2=ti(d.tab);
+    if(confirm(`📝 You have an unsaved ${ti2.ar} draft (${ageStr}).\n\nRestore it?`)){
+      S.tab=d.tab;
+      S.record=d.record;
+      S._prodNWC=d.prodNWC||{};
+      S.view='form';
+      render();
+    } else {
+      clearDraft();
+    }
+  }catch(e){clearDraft();}
 }
 function updSearch(v){
   S.search=v;const tc=document.querySelector('.main .card:last-child');
@@ -3196,6 +3424,7 @@ function importData(input){
 loadProducts();loadMapping();loadStockMapping();loadSH();loadRP();load();loadFormulas();migrateCompact();
 render(); // render first so DOM is ready
 checkODCallback(); // then handle Microsoft redirect callback
+setTimeout(checkDraft,400); // check for unsaved draft after render
 </script>
 </body>
 </html>

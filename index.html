@@ -3045,63 +3045,75 @@ function saveFrozenProducts(){try{localStorage.setItem(SK_FP,JSON.stringify(FROZ
 
 // ─── Frozen Tab Render ────────────────────────────
 // ══ Orders Tab ══════════════════════════════════════
+let _ordersData=null; // البيانات المحملة
+
 function renderOrdersTab(){
-  const recs=(D.orders||[]).sort((a,b)=>b.date.localeCompare(a.date));
   const inf=ti('orders');
   let h=`<div class="card" style="margin-bottom:10px">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
       <span style="font-size:20px">${inf.emoji}</span>
-      <div><div style="font-weight:700;color:${inf.color}">Orders from IAT Orders App</div>
-      <div style="font-size:11px;color:#90A4AE">${recs.length} record(s) — auto-imported from orders app</div></div>
-    </div>`;
+      <div style="flex:1">
+        <div style="font-weight:700;color:${inf.color}">Orders Total</div>
+        <div style="font-size:11px;color:#90A4AE">Load orders_total.json from OneDrive</div>
+      </div>
+    </div>
+    <label style="display:flex;align-items:center;justify-content:center;gap:8px;background:${inf.light};border:2px dashed ${inf.border};border-radius:10px;padding:14px;cursor:pointer;font-size:13px;color:${inf.color};font-weight:700">
+      📂 Load orders_total.json
+      <input type="file" accept=".json" style="display:none" onchange="loadOrdersJSON(this)"/>
+    </label>`;
 
-  if(!recs.length){
-    h+=`<div style="text-align:center;color:#90A4AE;padding:20px;font-size:13px">No orders imported yet.<br>Use 📤 Inventory button in IAT Orders app.</div>`;
-  }else{
-    h+=recs.map(r=>{
-      const prods=Object.entries(r.items||{}).filter(([,v])=>parseFloat(v.kg||v)||0);
-      const total=prods.reduce((s,[,v])=>s+(parseFloat(v.kg||v)||0),0);
-      return`<div style="border:1px solid ${inf.border};border-radius:8px;margin-bottom:8px;overflow:hidden">
-        <div style="background:${inf.light};padding:8px 12px;display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <span style="font-weight:700;color:${inf.color}">${inf.emoji} ${r.date}</span>
-            ${r.notes?`<span style="font-size:11px;color:#546E7A;margin-left:6px">— ${r.notes}</span>`:''}
-          </div>
-          <div style="display:flex;gap:6px;align-items:center">
-            <span style="font-size:12px;font-weight:700;color:${inf.color}">${total.toFixed(1)} kg</span>
-            <button onclick="deleteOrderRec('${r.id}')" style="background:#FFEBEE;border:none;border-radius:5px;padding:3px 8px;font-size:11px;color:#C62828;cursor:pointer">🗑</button>
-            <button onclick="useOrderInFormula('${r.id}')" style="background:${inf.light};border:1px solid ${inf.border};border-radius:5px;padding:3px 8px;font-size:11px;color:${inf.color};cursor:pointer">+ Formula</button>
-          </div>
+  if(_ordersData){
+    const r=_ordersData;
+    const prods=Object.entries(r.items||{}).filter(([,v])=>parseFloat(v.kg||v)||0);
+    const total=prods.reduce((s,[,v])=>s+(parseFloat(v.kg||v)||0),0);
+    h+=`<div style="margin-top:12px;border:1px solid ${inf.border};border-radius:8px;overflow:hidden">
+      <div style="background:${inf.light};padding:8px 12px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <span style="font-weight:700;color:${inf.color}">${inf.emoji} ${r.date}</span>
+          ${r.notes?`<span style="font-size:11px;color:#546E7A;margin-left:6px">— ${r.notes}</span>`:''}
         </div>
-        <table style="border-collapse:collapse;width:100%;font-size:12px">
-          ${prods.map(([p,v],i)=>`
-          <tr style="border-bottom:1px solid #EEE;background:${i%2?'#FAFAFA':'#FFF'}">
-            <td style="padding:5px 10px;color:#37474F">${p}</td>
-            <td style="padding:5px 10px;text-align:right;font-weight:700;color:${inf.color}">${parseFloat(v.kg||v||0).toFixed(2)} kg</td>
-          </tr>`).join('')}
-        </table>
-      </div>`;
-    }).join('');
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="font-size:12px;font-weight:700;color:${inf.color}">${total.toFixed(1)} kg</span>
+          <button onclick="useOrderInFormula()" style="background:${inf.light};border:1px solid ${inf.border};border-radius:5px;padding:4px 10px;font-size:12px;color:${inf.color};cursor:pointer;font-weight:700">+ Add to Formula A</button>
+        </div>
+      </div>
+      <table style="border-collapse:collapse;width:100%;font-size:12px">
+        ${prods.map(([p,v],i)=>`
+        <tr style="border-bottom:1px solid #EEE;background:${i%2?'#FAFAFA':'#FFF'}">
+          <td style="padding:5px 10px;color:#37474F">${p}</td>
+          <td style="padding:5px 10px;text-align:right;font-weight:700;color:${inf.color}">${parseFloat(v.kg||v||0).toFixed(2)} kg</td>
+        </tr>`).join('')}
+      </table>
+    </div>`;
   }
+
   h+='</div>';
   return h;
 }
 
-async function deleteOrderRec(id){
-  if(!confirm('Delete this order record?')) return;
-  try{
-    const db=window.$db;
-    await window.$deleteDoc(window.$doc(db,'orders',id));
-    D.orders=(D.orders||[]).filter(r=>r.id!==id);
-    render();showToast('✓ Deleted');
-  }catch(e){showToast('Error: '+e.message);}
+function loadOrdersJSON(input){
+  const file=input.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      _ordersData=JSON.parse(e.target.result);
+      render();
+      showToast('✓ Loaded: '+(_ordersData.date||''));
+    }catch(ex){showToast('⚠️ Invalid JSON file');}
+  };
+  reader.readAsText(file);
 }
 
-function useOrderInFormula(id){
-  // أضف السجل للـ Formula A كـ record
-  const exists=FA.find(op=>op.id===id);
-  if(exists){showToast('Already in Formula A');return;}
-  FA.push({id,op:'+'});
+function useOrderInFormula(){
+  if(!_ordersData){showToast('Load a file first');return;}
+  // أضف كـ record مؤقت في D.orders
+  const existing=D.orders.find(r=>r.id===_ordersData.id);
+  if(!existing) D.orders.unshift(_ordersData);
+  // أضف للـ Formula A
+  const alreadyInFA=FA.find(op=>op.id===_ordersData.id);
+  if(alreadyInFA){showToast('Already in Formula A');return;}
+  FA.push({id:_ordersData.id,op:'+'});
   saveState();
   S.tab='formulaA';render();
   showToast('✓ Added to Formula A');

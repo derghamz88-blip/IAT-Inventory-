@@ -8,7 +8,51 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://alcdn.msauth.net/browser/3.26.1/js/msal-browser.min.js"></script>
+<script type="module">
+import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import{getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged,createUserWithEmailAndPassword,sendPasswordResetEmail}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import{getFirestore,doc,setDoc,getDoc,deleteDoc,collection,getDocs}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+const _FC={apiKey:"AIzaSyDGX7RpEnmflXboLVUkaYjxhllMzvj0cBQ",authDomain:"iat-inventory-cbbd5.firebaseapp.com",projectId:"iat-inventory-cbbd5",storageBucket:"iat-inventory-cbbd5.firebasestorage.app",messagingSenderId:"138687412839",appId:"1:138687412839:web:ffe1a58ba3a3e1d52df2c2"};
+const _app=initializeApp(_FC);
+const _auth=getAuth(_app);
+const _db=getFirestore(_app);
+// expose to window
+window.$auth=_auth;window.$db=_db;
+window.$doc=doc;window.$setDoc=setDoc;window.$getDoc=getDoc;window.$deleteDoc=deleteDoc;
+window.$col=collection;window.$getDocs=getDocs;
+window.$signIn=(e,p)=>signInWithEmailAndPassword(_auth,e,p);
+window.$signOut=()=>signOut(_auth);
+window.$createUser=(e,p)=>createUserWithEmailAndPassword(_auth,e,p);
+window.$resetPass=(e)=>sendPasswordResetEmail(_auth,e);
+// ADMIN email - change this to your email
+window.ADMIN_EMAIL="derghamz88@gmail.com";
+onAuthStateChanged(_auth,user=>{
+  window.$user=user||null;
+  if(user){
+    document.getElementById('fb-login-screen')?.remove();
+    window.$isAdmin=(user.email?.toLowerCase()===window.ADMIN_EMAIL?.toLowerCase());
+    window.$isView=!window.$isAdmin;
+    window._fbBoot();
+  } else {
+    window.$user=null;window.$isAdmin=false;window.$isView=false;
+    window._showLogin();
+  }
+});
+</script>
 <style>
+
+#fb-login-screen{position:fixed;inset:0;background:linear-gradient(135deg,#0D1B2A,#1B5E20);display:flex;align-items:center;justify-content:center;z-index:99999}
+.fb-box{background:#fff;border-radius:18px;padding:28px 22px;width:90%;max-width:340px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.fb-logo{width:70px;height:70px;border-radius:50%;object-fit:cover;margin-bottom:10px}
+.fb-title{font-size:18px;font-weight:800;color:#1B3A4B;margin-bottom:2px}
+.fb-sub{font-size:11px;color:#90A4AE;margin-bottom:20px}
+.fb-inp{width:100%;padding:11px 13px;border:1.5px solid #E0E0E0;border-radius:9px;font-size:14px;margin-bottom:10px;outline:none;box-sizing:border-box}
+.fb-inp:focus{border-color:#2E7D32}
+.fb-btn{width:100%;padding:12px;background:#1B3A4B;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;margin-top:4px}
+.fb-btn:active{background:#0D1B2A}
+.fb-err{color:#C62828;font-size:12px;margin-top:8px;min-height:16px}
+.fb-view-badge{position:fixed;top:0;left:0;right:0;background:#E65100;color:#fff;text-align:center;font-size:11px;font-weight:700;padding:3px;z-index:9998;letter-spacing:.5px}
+
 /* ── Reset ───────────────────────────────────────────── */
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -33,7 +77,7 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--col-bg);min-heigh
 /* ── Header ─────────────────────────────────────────── */
 .hdr{background:linear-gradient(135deg,#0D1B2A,var(--col-dark));padding:10px var(--pad);display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100;min-height:52px}
 .hdr h1{color:#fff;font-size:var(--fs-base);font-weight:700;line-height:1.2}
-.hdr-sub{color:#90CAF9;font-size:var(--fs-xs)}
+.hdr-sub{color:#fff;font-size:var(--fs-xs)}
 .hdr-stats{margin-left:auto;display:flex;gap:10px}
 .hs{text-align:center}
 .hs-v{font-size:var(--fs-base);font-weight:700}
@@ -277,13 +321,15 @@ const TABS=[
   {key:'stocksummary', emoji:'📊',ar:'Sys.Stock',    color:'#6A1B9A',light:'#F3E5F5',border:'#CE93D8'},
   {key:'waste',        emoji:'♻️',ar:'Waste',        color:'#37474F',light:'#ECEFF1',border:'#B0BEC5'},
   {key:'production',   emoji:'🏭',ar:'Production',   color:'#D84315',light:'#FBE9E7',border:'#FFAB91'},
+  {key:'frozen',       emoji:'❄️',ar:'Frozen',       color:'#0277BD',light:'#E1F5FE',border:'#4FC3F7'},
+  {key:'orders',       emoji:'🛒',ar:'Orders',       color:'#00838F',light:'#E0F7FA',border:'#80DEEA'},
   {key:'records',      emoji:'📋',ar:'Records',      color:'#0288D1',light:'#E1F5FE',border:'#81D4FA'},
   {key:'formulaA',     emoji:'🧮',ar:'Formula A',    color:'#4527A0',light:'#EDE7F6',border:'#B39DDB'},
   {key:'formulaB',     emoji:'🧮',ar:'Formula B',    color:'#00695C',light:'#E0F2F1',border:'#80CBC4'},
   {key:'diff',         emoji:'⚖️',ar:'Difference',   color:'#BF360C',light:'#FBE9E7',border:'#FFAB91'},
   {key:'settings',     emoji:'⚙️',ar:'Settings',     color:'#455A64',light:'#ECEFF1',border:'#B0BEC5'},
 ];
-const TABS_R1=['inventory','receivables','returns','sales','daysales','stocksummary','waste','production'];
+const TABS_R1=['inventory','receivables','returns','sales','daysales','stocksummary','waste','production','frozen','orders'];
 const TABS_R2=['records','formulaA','formulaB','diff','settings'];
 
 const TYPE_INFO={
@@ -294,17 +340,22 @@ const TYPE_INFO={
   daysales:     {emoji:'☀️',color:'#AD1457',label:'Day Sales'},
   stocksummary: {emoji:'📊',color:'#6A1B9A',label:'Sys.Stock'},
   waste:        {emoji:'♻️',color:'#37474F',label:'Waste'},
+  orders:       {emoji:'🛒',color:'#00838F',label:'Orders'},
 };
 
+
 // ═══ STORAGE KEYS ═══════════════════════════════════
-const SK='chk-inv-v3',SK_P='chk-prods-v1',SK_M='chk-map-v1',SK_SM='chk-stk-v1',SK_FA='chk-fa-v1',SK_FB='chk-fb-v1',SK_NWC='chk-nwc-types';
+const SK='chk-inv-v3',SK_P='chk-prods-v1',SK_M='chk-map-v1',SK_SM='chk-stk-v1',SK_FA='chk-fa-v1',SK_FB='chk-fb-v1',SK_NWC='chk-nwc-types',SK_FP='chk-frozen-prods-v1';
 
 // ═══ DYNAMIC PRODUCTS ═══════════════════════════════
 let PRODUCTS=[],PARENT_PRODUCTS=[],C_MAP={};
 function getParent(n){for(const s of[' 500 FF',' 500']){if(n.endsWith(s)){const p=n.slice(0,-s.length).trim();if(PRODUCTS.includes(p))return p;}}return null;}
 function recompute(){C_MAP={};PRODUCTS.forEach(p=>{const r=getParent(p);if(r)C_MAP[p]=r;});PARENT_PRODUCTS=PRODUCTS.filter(p=>!C_MAP[p]);}
 function loadProducts(){try{const s=localStorage.getItem(SK_P);PRODUCTS=s?JSON.parse(s):[...DP];}catch(e){PRODUCTS=[...DP];}recompute();}
-function saveProducts(){localStorage.setItem(SK_P,JSON.stringify(PRODUCTS));recompute();}
+function saveProducts(){
+  localStorage.setItem(SK_P,JSON.stringify(PRODUCTS));recompute();
+  _scheduleSave();
+}
 
 // ═══ DYNAMIC MAPPING (Sales) ════════════════════════
 let MD=[];
@@ -325,29 +376,37 @@ let S={tab:'inventory',view:'list',record:null,search:'',expanded:new Set(),
        listFrom:'',listTo:'',gFrom:'',gTo:'',
        faShowDetail:false,fbShowDetail:false,
        _prodNWC:{}}; // per-product NWC batches
-let D={inventories:[],receivables:[],returns:[],sales:[],daySales:[],stockSummaries:[],waste:[],production:[]};
+let D={inventories:[],receivables:[],returns:[],sales:[],daySales:[],stockSummaries:[],waste:[],production:[],frozen:[],orders:[]};
 let FA=[],FB=[];
 let UP ={step:'upload',fileName:'',date:'',rows:[],converted:{},unmatched:[]};
 let UPD={step:'upload',fileName:'',date:'',rows:[],converted:{},unmatched:[]};
 let UPS={step:'upload',fileName:'',date:'',rows:[],converted:{},unmatched:[]};
 
 function load(){
-  try{const s=localStorage.getItem(SK);if(s){const d=JSON.parse(s);D={inventories:d.inventories||[],receivables:d.receivables||[],returns:d.returns||[],sales:d.sales||[],daySales:d.daySales||[],stockSummaries:d.stockSummaries||[],waste:d.waste||[],production:d.production||[]};}}
+  try{const s=localStorage.getItem(SK);if(s){const d=JSON.parse(s);D={inventories:d.inventories||[],receivables:d.receivables||[],returns:d.returns||[],sales:d.sales||[],daySales:d.daySales||[],stockSummaries:d.stockSummaries||[],waste:d.waste||[],production:d.production||[],frozen:d.frozen||[],orders:d.orders||[]};}}
   catch(e){}
 }
-function save(){try{localStorage.setItem(SK,JSON.stringify(D));}catch(e){alert('Storage error!');}}
+function save(){
+  try{localStorage.setItem(SK,JSON.stringify(D));}catch(e){}
+  _scheduleSave();
+}
 function loadFormulas(){try{const a=localStorage.getItem(SK_FA),b=localStorage.getItem(SK_FB);FA=a?JSON.parse(a):[];FB=b?JSON.parse(b):[];}catch(e){FA=[];FB=[];}}
-function saveFormulas(){localStorage.setItem(SK_FA,JSON.stringify(FA));localStorage.setItem(SK_FB,JSON.stringify(FB));}
+function saveFormulas(){
+  localStorage.setItem(SK_FA,JSON.stringify(FA));localStorage.setItem(SK_FB,JSON.stringify(FB));
+  _scheduleSave();
+}
 function gid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
 function emptyItems(){const o={};PRODUCTS.forEach(p=>o[p]={kg:'',pcs:''});return o;}
 function newRec(){return{id:gid(),date:new Date().toISOString().split('T')[0],notes:'',items:emptyItems()};}
 function dk(t){
+  if(t==='frozen')return'frozen';
   if(t==='inventory')return'inventories';
   if(t==='receivables')return'receivables';
   if(t==='returns')return'returns';
   if(t==='daysales')return'daySales';
   if(t==='stocksummary')return'stockSummaries';
   if(t==='waste')return'waste';
+  if(t==='orders')return'orders';
   return'sales';
 }
 function ti(k){return TABS.find(t=>t.key===k);}
@@ -366,11 +425,12 @@ function getTotalKg(items,p){
 
 
 // ═══ FORMULA HELPERS ════════════════════════════════
-const REC_TYPE_MAP={inventories:'inventory',receivables:'receivables',returns:'returns',sales:'sales',daySales:'daysales',stockSummaries:'stocksummary',waste:'waste'};
+const REC_TYPE_MAP={inventories:'inventory',receivables:'receivables',returns:'returns',sales:'sales',daySales:'daysales',stockSummaries:'stocksummary',waste:'waste',production:'production',frozen:'frozen',orders:'orders'};
 
 function findRecord(id){
   for(const[key,type] of Object.entries(REC_TYPE_MAP)){
-    const r=(D[key]||[]).find(r=>r.id===id);
+    const arr=key==="orders"?D.orders:(D[key]||[]);
+    const r=arr.find(r=>r.id===id);
     if(r)return{record:r,type,key:type}; // key = type value (inventory/receivables/etc)
   }return null;
 }
@@ -508,6 +568,8 @@ function render(){
     if(tab==='receivables'&&view==='receipt') h+=renderReceiptCalc();
     else h+=view==='list'?renderList():renderForm();
   }
+  else if(tab==='frozen')       h+=view==='form'?renderFrozenForm():renderFrozenTab();
+  else if(tab==='orders')       h+=renderOrdersTab();
   else if(tab==='sales')        h+=view==='form'?renderForm():renderSalesTab();
   else if(tab==='daysales')     h+=view==='form'?renderForm():renderDaySalesTab();
   else if(tab==='stocksummary') h+=view==='form'?renderForm():renderStockTab();
@@ -548,6 +610,9 @@ function _kbdEnterHandler(e){
   if(!cur||!['INPUT','TEXTAREA'].includes(cur.tagName))return;
   if(cur.type==='hidden'||cur.type==='file')return;
   e.preventDefault();
+  // Fire input event to ensure value is captured before moving
+  cur.dispatchEvent(new Event('input',{bubbles:true}));
+  cur.dispatchEvent(new Event('change',{bubbles:true}));
   const inputs=[...document.querySelectorAll('input:not([type=hidden]):not([type=file]),textarea')].filter(el=>{
     return el.offsetParent!==null&&!el.disabled&&!el.readOnly&&el.tabIndex!==-1;
   });
@@ -561,8 +626,8 @@ function _kbdEnterHandler(e){
 
 function renderHdr(){
   return`<header class="hdr">
-    <div style="font-size:22px">🐔</div>
-    <div><h1>Chicken Inventory</h1><div class="hdr-sub">Stock Management System</div></div>
+    <img src="data:image/png;base64,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" style="width:38px;height:38px;border-radius:50%;object-fit:cover;flex-shrink:0" alt="IAT">
+    <div><h1>Chicken Inventory</h1><div class="hdr-sub">I A T Trading</div></div>
     <div class="hdr-stats">
       <div class="hs"><div class="hs-v" style="color:#90CAF9">${D.inventories.length}</div><div class="hs-l">Inv</div></div>
       <div class="hs"><div class="hs-v" style="color:#A5D6A7">${D.receivables.length}</div><div class="hs-l">Rec</div></div>
@@ -571,12 +636,12 @@ function renderHdr(){
     </div>
     <div style="display:flex;gap:2px;margin-left:6px;align-items:center">
       <button onclick="odSaveClick()" title="Save to OneDrive" style="padding:7px 11px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:18px;line-height:1">☁️</button>
-      <button onclick="odDebug()" title="OneDrive debug" style="padding:7px 11px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:7px;color:#fff;cursor:pointer;font-size:14px;line-height:1">🔍</button>
-      <label title="Restore from file" style="padding:7px 11px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:18px;line-height:1">
-        📂<input type="file" accept=".json,.txt" onchange="odLoadFile(this)" style="display:none">
-      </label>
-      <input id="od-load-input" type="file" accept=".json,.txt" onchange="odLoadFile(this)" style="display:none">
+      <button onclick="odForceReset()" title="Reset OneDrive" style="padding:7px 11px;background:rgba(255,100,100,.2);border:1px solid rgba(255,100,100,.4);border-radius:7px;color:#fff;cursor:pointer;font-size:14px;line-height:1">🔄</button>
       <button onclick="showNetCalc()" title="Net Weight Calculator" style="padding:7px 11px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:18px;line-height:1">⚖️</button>
+      ${window.$isAdmin?`
+      <button onclick="savePublishSnap()" title="حفظ نقطة البداية" style="padding:7px 11px;background:rgba(100,200,100,.25);border:1px solid rgba(100,200,100,.5);border-radius:7px;color:#fff;cursor:pointer;font-size:16px;line-height:1">💾</button>
+      <button onclick="publishReport()" title="إرسال التغييرات على WhatsApp" style="padding:7px 11px;background:rgba(37,211,102,.25);border:1px solid rgba(37,211,102,.5);border-radius:7px;color:#fff;cursor:pointer;font-size:16px;line-height:1">📤</button>
+      `:''}
       <button onclick="showHdrMenu()" title="More" style="padding:7px 11px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:7px;color:#fff;cursor:pointer;font-size:20px;line-height:1">⋮</button>
     </div>
   </header>`;
@@ -976,7 +1041,7 @@ function saveReceiptAsRec(){
   // Save CWC verification if available
   const cwcData=CWC_ROWS.filter(row=>parseFloat(row.ctns)>0&&parseFloat(row.gross)>0).map(row=>{
     const res=calcCWCRow(row);
-    return{sh:row.sh,ctns:parseFloat(row.ctns),gross:parseFloat(row.gross),net:parseFloat(res.net.toFixed(3))};
+    return{sh:row.sh,ctns:parseFloat(row.ctns),gross:parseFloat(row.gross),cwt:parseFloat(row.cwt)||0,net:parseFloat(res.net.toFixed(3))};
   });
   const cwcTotalNet=cwcData.reduce((s,r)=>s+r.net,0);
   const cwcExpected=CWC_EXPECTED||parseFloat(t.grand)||0;
@@ -1005,6 +1070,7 @@ function saveReceiptAsRec(){
   }
   save();
   RC={supplier:'',date:new Date().toISOString().split('T')[0],temp:'',ctns:{},sizePcs:{},largePcs:8,cuts:{},extraItems:{}};
+  CWC_ROWS=[{id:1,sh:'',ctns:'',gross:'',cwt:''}];CWC_ID=1;CWC_EXPECTED=0;
   S.view='list';render();showToast(_editRecId?'✅ Record updated!':'✅ Receipt saved as Receivable!');
   _editRecId=null;
 }
@@ -1019,7 +1085,10 @@ let NWC_TYPES=[
   {key:'custom',label:'Custom...',wt:0},
 ];
 function loadNWCTypes(){try{const s=localStorage.getItem(SK_NWC);if(s){const d=JSON.parse(s);if(Array.isArray(d)&&d.length)NWC_TYPES=d;}}catch(e){}}
-function saveNWCTypes(){try{localStorage.setItem(SK_NWC,JSON.stringify(NWC_TYPES));}catch(e){}}
+function saveNWCTypes(){
+  try{localStorage.setItem(SK_NWC,JSON.stringify(NWC_TYPES));}catch(e){}
+  _scheduleSave();
+}
 
 function getNWCWt(row){
   if(row.type==='custom')return parseFloat(row.cwt)||0;
@@ -1242,9 +1311,16 @@ function fallbackCopy(txt){
 // ─── Per-Product Net Weight Calculator ───────────
 function showProdNWC(prod){
   document.getElementById('pnwc-modal')?.remove();
-  // Init rows from saved state or fresh
+  // Init rows: restore from record._nwc if available, else from session state, else fresh
   if(!S._prodNWC)S._prodNWC={};
-  if(!S._prodNWC[prod])S._prodNWC[prod]=[{id:1,count:'',type:'salle',gross:'',cwt:''}];
+  if(!S._prodNWC[prod]){
+    const saved=S.record&&S.record._nwc&&S.record._nwc[prod];
+    if(saved&&saved.length){
+      S._prodNWC[prod]=saved.map((r,i)=>({id:i+1,count:r.count||'',type:r.type||'salle',gross:r.gross||'',cwt:r.cwt||''}));
+    } else {
+      S._prodNWC[prod]=[{id:1,count:'',type:'salle',gross:'',cwt:''}];
+    }
+  }
   const rows=S._prodNWC[prod];
   const m=document.createElement('div');
   m.id='pnwc-modal';
@@ -1390,6 +1466,10 @@ function applyPNWCTotal(prod){
     if(!S.record.items)S.record.items={};
     if(!S.record.items[prod])S.record.items[prod]={kg:'',pcs:''};
     S.record.items[prod].kg=tot.toFixed(3);
+    // Save NWC rows with the record
+    if(!S.record._nwc)S.record._nwc={};
+    const rows=S._prodNWC&&S._prodNWC[prod];
+    if(rows)S.record._nwc[prod]=rows.map(r=>({count:r.count,type:r.type,gross:r.gross,cwt:r.cwt}));
   }
 
   document.getElementById('pnwc-modal')?.remove();
@@ -1733,7 +1813,12 @@ function renderSettingsAPI(){
 
 function showCartonCalc(recId){
   const ex=document.getElementById('cwc-modal');if(ex){ex.remove();return;}
-  if(!recId){CWC_ROWS=[{id:1,sh:'',ctns:'',gross:'',cwt:''}];CWC_ID=1;_cwcTargetRecId=null;}
+  if(!recId){
+    _cwcTargetRecId=null;
+    // Keep CWC_ROWS if user already entered data; reset only if empty/unset
+    if(!CWC_ROWS||!CWC_ROWS.length)CWC_ROWS=[{id:1,sh:'',ctns:'',gross:'',cwt:''}];
+    if(!CWC_ID)CWC_ID=CWC_ROWS.length;
+  }
   const m=document.createElement('div');m.id='cwc-modal';
   m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;overflow-y:auto;display:flex;align-items:flex-start;justify-content:center;padding:20px 16px';
   m.innerHTML=`<div style="background:#fff;border-radius:14px;padding:18px;max-width:400px;width:100%;box-shadow:0 8px 30px rgba(0,0,0,.25)">
@@ -1826,7 +1911,7 @@ function editCWC(recId){
   const rec=D.receivables.find(r=>r.id===recId);
   if(!rec)return;
   if(rec.cwc&&rec.cwc.rows.length){
-    CWC_ROWS=rec.cwc.rows.map((row,i)=>({id:i+1,sh:row.sh||'',ctns:String(row.ctns),gross:String(row.gross),cwt:''}));
+    CWC_ROWS=rec.cwc.rows.map((row,i)=>({id:i+1,sh:row.sh||'',ctns:String(row.ctns),gross:String(row.gross),cwt:row.cwt?String(row.cwt):''}));
     CWC_ID=CWC_ROWS.length;
     CWC_EXPECTED=rec.cwc.expected||0;
   } else {
@@ -1861,7 +1946,7 @@ function saveCWCAndClose(){
     if(rec){
       const cwcData=CWC_ROWS.filter(row=>parseFloat(row.ctns)>0&&parseFloat(row.gross)>0).map(row=>{
         const res=calcCWCRow(row);
-        return{sh:row.sh,ctns:parseFloat(row.ctns),gross:parseFloat(row.gross),net:parseFloat(res.net.toFixed(3))};
+        return{sh:row.sh,ctns:parseFloat(row.ctns),gross:parseFloat(row.gross),cwt:parseFloat(row.cwt)||0,net:parseFloat(res.net.toFixed(3))};
       });
       const tot=cwcData.reduce((s,r)=>s+r.net,0);
       const diff=tot-CWC_EXPECTED;
@@ -2008,7 +2093,7 @@ function renderFormula(fid){
     <!-- Record picker -->
     <div style="font-size:11px;color:#546E7A;margin-bottom:6px;font-weight:600">Add Records:</div>
     <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
-      ${[['all','All'],['inventories','📦'],['receivables','📥'],['returns','🔄'],['sales','📤'],['daySales','☀️'],['stockSummaries','📊'],['waste','♻️']].map(([k,l])=>
+      ${[['all','All'],['inventories','📦'],['receivables','📥'],['returns','🔄'],['sales','📤'],['daySales','☀️'],['stockSummaries','📊'],['waste','♻️'],['production','🏭']].map(([k,l])=>
         `<button class="btn" style="background:${ff===k?fcolor:'#ECEFF1'};color:${ff===k?'#fff':'#546E7A'};padding:3px 9px;font-size:11px" onclick="S.${fid==='a'?'faFilter':'fbFilter'}='${k}';render()">${l}</button>`
       ).join('')}
     </div>`;
@@ -2116,37 +2201,67 @@ function renderDiff(){
         <div style="font-size:15px;font-weight:700;color:${grandD>0?'#2E7D32':grandD<0?'#C62828':'#546E7A'}">${grandD>=0?'+':''}${grandD.toFixed(2)}</div>
         <div style="font-size:9px;color:#78909C">Diff</div></div>
     </div>
-    <div style="border-radius:9px;border:1px solid #ECEFF1;overflow:hidden">
-    <table style="width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed">
-      <colgroup><col style="width:24px"><col><col style="width:75px"><col style="width:75px"><col style="width:85px"></colgroup>
-      <thead><tr style="background:#263238;color:#fff">
-        <th style="padding:4px 5px;text-align:center">#</th>
-        <th style="padding:4px 5px">Product</th>
-        <th style="padding:3px 4px;text-align:center;background:#4527A0CC">A<br><small style="font-weight:400;font-size:9px">Comb KG</small></th>
-        <th style="padding:3px 4px;text-align:center;background:#00695CCC">B<br><small style="font-weight:400;font-size:9px">Comb KG</small></th>
-        <th style="padding:3px 4px;text-align:center;background:#BF360C">B−A<br><small style="font-weight:400;font-size:9px">Diff</small></th>
-      </tr></thead><tbody>`;
+    <div style="border-radius:9px;border:1px solid #ECEFF1;overflow-x:auto;-webkit-overflow-scrolling:touch">
+    <table style="border-collapse:collapse;font-size:11px;min-width:520px">
+      <thead>
+        <tr style="background:#263238;color:#fff">
+          <th rowspan="2" style="padding:4px 4px;text-align:center;width:22px;position:sticky;left:0;background:#263238;z-index:2">#</th>
+          <th rowspan="2" style="padding:4px 6px;text-align:left;width:90px;position:sticky;left:22px;background:#263238;z-index:2;border-right:2px solid rgba(255,255,255,.2)">Product</th>
+          <th colspan="2" style="padding:3px 4px;text-align:center;background:#4527A0;border-bottom:1px solid rgba(255,255,255,.2)">A</th>
+          <th colspan="2" style="padding:3px 4px;text-align:center;background:#00695C;border-bottom:1px solid rgba(255,255,255,.2)">B</th>
+          <th colspan="2" style="padding:3px 4px;text-align:center;background:#BF360C;border-bottom:1px solid rgba(255,255,255,.2)">B−A</th>
+        </tr>
+        <tr style="background:#263238;color:#fff;font-size:9px">
+          <th style="padding:2px 4px;text-align:center;background:#4527A0CC;width:55px">Qty</th>
+          <th style="padding:2px 4px;text-align:center;background:#4527A099;width:55px">Comb</th>
+          <th style="padding:2px 4px;text-align:center;background:#00695CCC;width:55px">Qty</th>
+          <th style="padding:2px 4px;text-align:center;background:#00695C99;width:55px">Comb</th>
+          <th style="padding:2px 4px;text-align:center;background:#BF360CCC;width:55px">Qty</th>
+          <th style="padding:2px 4px;text-align:center;background:#BF360C99;width:55px">Comb</th>
+        </tr>
+      </thead><tbody>`;
 
-  const allVis=PRODUCTS.filter(p=>!C_MAP[p]&&(getTotalKg(totA,p)!==0||getTotalKg(totB,p)!==0));
+  // Show all products (kg and pcs separately) for Qty, only parents for Comb
+  const allVis=PRODUCTS.filter(p=>{
+    const isPcs=!!C_MAP[p];
+    const qA=isPcs?(totA[p]?.pcs||0):(totA[p]?.kg||0);
+    const qB=isPcs?(totB[p]?.pcs||0):(totB[p]?.kg||0);
+    const ckA=!isPcs?getTotalKg(totA,p):0;
+    const ckB=!isPcs?getTotalKg(totB,p):0;
+    return qA!==0||qB!==0||ckA!==0||ckB!==0;
+  });
   allVis.forEach((p,i)=>{
-    const ckA=getTotalKg(totA,p);
-    const ckB=getTotalKg(totB,p);
-    const d=ckB-ckA;
-    const dColor=d>0?'#1B5E20':d<0?'#B71C1C':'#9E9E9E';
-    h+=`<tr style="background:${i%2===0?'#fff':'#FAFAFA'};border-bottom:1px solid #EFEFEF">
-      <td style="padding:3px 4px;color:#BDBDBD;font-size:9px;text-align:center">${PRODUCTS.indexOf(p)+1}</td>
-      <td style="padding:1px 4px;font-weight:700;color:#1B5E20;font-size:10px;word-break:break-word">${p}</td>
-      <td style="padding:4px 5px;text-align:center;color:${ckA!==0?'#4527A0':'#CFD8DC'}">${ckA!==0?ckA.toFixed(2):'—'}</td>
-      <td style="padding:4px 5px;text-align:center;color:${ckB!==0?'#00695C':'#CFD8DC'}">${ckB!==0?ckB.toFixed(2):'—'}</td>
-      <td style="padding:4px 5px;text-align:center;font-weight:700;color:${dColor};background:${d>0?'#F1F8E9':d<0?'#FFF5F5':'#F5F5F5'}">${d!==0?(d>0?'+':'')+d.toFixed(2):'—'}</td>
+    const isPcs=!!C_MAP[p];
+    const unit=isPcs?'pcs':'kg';
+    const qA=isPcs?(totA[p]?.pcs||0):(totA[p]?.kg||0);
+    const qB=isPcs?(totB[p]?.pcs||0):(totB[p]?.kg||0);
+    const dQty=qB-qA;
+    const ckA=!isPcs?getTotalKg(totA,p):null;
+    const ckB=!isPcs?getTotalKg(totB,p):null;
+    const dComb=(!isPcs&&ckA!==null&&ckB!==null)?ckB-ckA:null;
+    const dQtyColor=dQty>0?'#1B5E20':dQty<0?'#B71C1C':'#9E9E9E';
+    const dCombColor=dComb>0?'#1B5E20':dComb<0?'#B71C1C':'#9E9E9E';
+    const pColor=isPcs?'#7B1FA2':'#1B5E20';
+    const bg=i%2===0?'#fff':'#FAFAFA';
+    h+=`<tr style="background:${bg};border-bottom:1px solid #EFEFEF">
+      <td style="padding:3px 4px;color:#BDBDBD;font-size:9px;text-align:center;position:sticky;left:0;background:${bg};z-index:1">${PRODUCTS.indexOf(p)+1}</td>
+      <td style="padding:4px 6px;font-weight:700;color:${pColor};font-size:10px;word-break:break-word;position:sticky;left:22px;background:${bg};z-index:1;border-right:2px solid #E0E0E0">${p}${isPcs?'<div style="font-size:8px;color:#90A4AE;font-weight:400">↗ '+C_MAP[p]+'</div>':''}</td>
+      <td style="padding:3px 4px;text-align:center;font-size:10px;color:${qA!==0?'#4527A0':'#CFD8DC'}">${qA!==0?qA.toFixed(2)+' <small>'+unit+'</small>':'—'}</td>
+      <td style="padding:3px 4px;text-align:center;font-size:10px;color:${ckA?'#4527A099':'#CFD8DC'};background:#F8F8FF">${isPcs?'—':ckA!==0?ckA.toFixed(2):'—'}</td>
+      <td style="padding:3px 4px;text-align:center;font-size:10px;color:${qB!==0?'#00695C':'#CFD8DC'}">${qB!==0?qB.toFixed(2)+' <small>'+unit+'</small>':'—'}</td>
+      <td style="padding:3px 4px;text-align:center;font-size:10px;color:${ckB?'#00695C99':'#CFD8DC'};background:#F8FBF8">${isPcs?'—':ckB!==0?ckB.toFixed(2):'—'}</td>
+      <td style="padding:3px 4px;text-align:center;font-weight:700;font-size:10px;color:${dQtyColor};background:${dQty>0?'#F1F8E9':dQty<0?'#FFF5F5':'#F5F5F5'}">${dQty!==0?(dQty>0?'+':'')+dQty.toFixed(2)+' <small>'+unit+'</small>':'—'}</td>
+      <td style="padding:3px 4px;text-align:center;font-weight:700;font-size:10px;color:${dComb!==null?dCombColor:'#CFD8DC'};background:${dComb>0?'#EEF7EE':dComb<0?'#FFF0F0':'#F8F8F8'}">${isPcs||dComb===null?'—':dComb!==0?(dComb>0?'+':'')+dComb.toFixed(2):'0'}</td>
     </tr>`;
   });
   const dTotal=grandD;
   h+=`<tr style="background:#263238;color:#fff;font-weight:700">
-    <td colspan="2" style="padding:7px 7px">TOTAL</td>
-    <td style="text-align:center;background:#4527A0CC">${grandA.toFixed(2)}</td>
-    <td style="text-align:center;background:#00695CCC">${grandB.toFixed(2)}</td>
-    <td style="text-align:center;background:#BF360C">${dTotal>=0?'+':''}${dTotal.toFixed(2)}</td>
+    <td style="padding:7px 4px;position:sticky;left:0;background:#263238;z-index:1"></td>
+    <td style="padding:7px 6px;position:sticky;left:22px;background:#263238;z-index:1">TOTAL</td>
+    <td style="text-align:center;padding:5px;background:#4527A0" colspan="2">${grandA.toFixed(2)}</td>
+    <td style="text-align:center;padding:5px;background:#00695C" colspan="2">${grandB.toFixed(2)}</td>
+    <td style="text-align:center;padding:5px;background:#BF360C">${dTotal>=0?'+':''}${dTotal.toFixed(2)}</td>
+    <td style="text-align:center;padding:5px;background:#BF360C99">${dTotal>=0?'+':''}${dTotal.toFixed(2)}</td>
   </tr></tbody></table></div></div>`;
   return h;
 }
@@ -2161,11 +2276,12 @@ function renderSettings(){
       <button class="stb${S.stab==='stockmap'?' on':''}" onclick="S.stab='stockmap';render()">📊 Stock Map (${SMD.length})</button>
       <button class="stb${S.stab==='sh'?' on':''}" onclick="S.stab='sh';render()">🏭 Slaughterhouses (${SH_DATA.length})</button>
       <button class="stb${S.stab==='rp'?' on':''}" onclick="S.stab='rp';render()">✂️ Cut Products (${RP_DATA.length})</button>
+      <button class="stb${S.stab==='frozen'?' on':''}" onclick="S.stab='frozen';render()">❄️ Frozen Products (${FROZEN_PRODUCTS.length})</button>
       <button class="stb${S.stab==='nwctypes'?' on':''}" onclick="S.stab='nwctypes';render()">⚖️ Containers (${NWC_TYPES.filter(t=>t.key!=='custom').length})</button>
       <button class="stb${S.stab==='api'?' on':''}" onclick="S.stab='api';render()">🔑 API Key</button>
     </div>
   </div>
-  ${S.stab==='products'?renderSettingsProds():S.stab==='mapping'?renderSettingsMap():S.stab==='stockmap'?renderSettingsStockMap():S.stab==='sh'?renderSettingsSH():S.stab==='rp'?renderSettingsRP():S.stab==='nwctypes'?renderSettingsNWC():renderSettingsAPI()}`;
+  ${S.stab==='products'?renderSettingsProds():S.stab==='mapping'?renderSettingsMap():S.stab==='stockmap'?renderSettingsStockMap():S.stab==='sh'?renderSettingsSH():S.stab==='rp'?renderSettingsRP():S.stab==='nwctypes'?renderSettingsNWC():S.stab==='frozen'?renderFrozenSettings():renderSettingsAPI()}`;
 }
 function renderSettingsNWC(){
   const editable=NWC_TYPES.filter(t=>t.key!=='custom');
@@ -2238,6 +2354,17 @@ function renderSettingsProds(){
     </div>
   </div></div>`;return h;
 }
+function _renderExcelNamesList(){
+  let excelNames=[];
+  try{const s=localStorage.getItem('chk-last-excel-names');if(s)excelNames=JSON.parse(s);}catch(e){}
+  const unmapped=excelNames.filter(n=>!MD.some(m=>m.n===n));
+  if(!unmapped.length)return '';
+  const btns=unmapped.map(n=>{
+    const safe=n.replace(/"/g,'&quot;');
+    return '<button onclick="document.getElementById(\'mn-n\').value=&quot;'+safe+'&quot;" style="background:#E3F2FD;color:#1565C0;border:1px solid #BBDEFB;border-radius:5px;padding:2px 7px;font-size:10px;cursor:pointer">'+n+'</button>';
+  }).join('');
+  return '<div style="margin-bottom:8px"><div style="font-size:9px;color:#90A4AE;margin-bottom:3px">&#128203; From last Excel ('+unmapped.length+' unmapped):</div><div style="display:flex;flex-wrap:wrap;gap:4px;max-height:100px;overflow-y:auto">'+btns+'</div></div>';
+}
 function renderSettingsMap(){
   const srch=(S.mapSearch||'').toLowerCase();
   const maps=MD.filter(m=>!srch||m.n.toLowerCase().includes(srch)||m.p.toLowerCase().includes(srch));
@@ -2275,6 +2402,7 @@ function renderSettingsMap(){
   if(!maps.length)h+=`<tr><td colspan="5" style="text-align:center;padding:16px;color:#90A4AE">No mappings found</td></tr>`;
   h+=`</tbody></table></div>
   <div style="font-size:11px;color:#546E7A;margin-bottom:6px;font-weight:600">+ Add New</div>
+  ${_renderExcelNamesList()}
   <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:flex-end">
     <div style="flex:2;min-width:130px"><div style="font-size:9px;color:#90A4AE;margin-bottom:2px">Sales Name</div>
       <input class="fi" id="mn-n" type="text" placeholder="Sales product name" style="width:100%;font-size:11px"></div>
@@ -2405,9 +2533,23 @@ function saveStockRec(){
 function renderSalesTab(){return UP.step==='upload'?renderUpload():renderSalesResult();}
 function renderUpload(){
   const inf=ti('sales');const recs=[...D.sales].sort((a,b)=>b.date.localeCompare(a.date));
-  let h=`<div class="card" style="border:1.5px solid ${inf.border}">
-    <h2 style="margin:0 0 5px;font-size:16px;color:${inf.color}">📤 Sales</h2>
-    <p style="color:#78909C;font-size:11px;margin-bottom:14px">Upload your sales Excel file to auto-convert.</p>
+  let h=`<div class="card" style="border:2px solid #1565C0;background:#E3F2FD">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span style="font-size:18px">📊</span>
+      <div style="font-size:14px;font-weight:800;color:#1565C0">Upload Sales + Day Sales Together</div>
+    </div>
+    <div style="font-size:11px;color:#1565C0;margin-bottom:10px">نفس ملف Excel: العمود C للـ Sales، العمود D للـ Day Sales</div>
+    <div class="upload-zone" id="uz-both" onclick="document.getElementById('fi-both').click()"
+      ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDropBoth(event)"
+      style="border-color:#1565C0;background:#fff">
+      <input type="file" id="fi-both" accept=".xlsx,.xls,.csv" onchange="handleFileBoth(this)" style="display:none">
+      <div style="font-size:32px;margin-bottom:6px">⬆️</div>
+      <div style="font-size:13px;font-weight:700;color:#1565C0;margin-bottom:2px">تحميل الملف (Sales + Day Sales)</div>
+      <div style="font-size:10px;color:#78909C">Col B = Name | Col C = Sales Qty | Col D = Day Sales Qty</div>
+    </div></div>
+    <div class="card" style="border:1.5px solid ${inf.border}">
+    <h2 style="margin:0 0 5px;font-size:16px;color:${inf.color}">📤 Sales فقط</h2>
+    <p style="color:#78909C;font-size:11px;margin-bottom:14px">أو ارفع ملف Sales منفصل (Col C).</p>
     <div class="upload-zone" id="uz" onclick="document.getElementById('fi').click()"
       ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event)">
       <input type="file" id="fi" accept=".xlsx,.xls,.csv" onchange="handleFile(this)" style="display:none">
@@ -2502,9 +2644,15 @@ function switchTab(t){
 function formatDateShort(d){const[y,m,day]=d.split('-');return`${day}/${m}/${y}`;}
 
 function startNew(){
-  const r=newRec();
-  const inf=ti(S.tab);
-  r.notes=inf.ar;
+  let r;
+  if(S.tab==='frozen'){
+    // Frozen uses its own empty items (just numeric values by product ID)
+    r={id:gid(),date:new Date().toISOString().split('T')[0],notes:'',items:{}};
+  } else {
+    r=newRec();
+    const inf=ti(S.tab);
+    r.notes=inf.ar;
+  }
   S._prodNWC={};
   S.record=r;S.view='form';render();
 }
@@ -2534,14 +2682,30 @@ function editRec(id){
     }
     S.view='receipt';render();return;
   }
-  S.record={...JSON.parse(JSON.stringify(r)),items:expandItems(r.items)};
+  // Frozen: keep items as-is (numeric values), others: expand
+  const recItems=S.tab==='frozen'?{...(r.items||{})}:expandItems(r.items);
+  S.record={...JSON.parse(JSON.stringify(r)),items:recItems};
+  // Restore NWC rows from saved _nwc in record
+  S._prodNWC={};
+  if(r._nwc){
+    Object.entries(r._nwc).forEach(([prod,rows])=>{
+      if(Array.isArray(rows)&&rows.length)
+        S._prodNWC[prod]=rows.map((row,i)=>({id:i+1,count:row.count||'',type:row.type||'salle',gross:row.gross||'',cwt:row.cwt||''}));
+    });
+  }
   S.view='form';render();
 }
 function delRec(id){if(!confirm('Delete?'))return;D[dk(S.tab)]=D[dk(S.tab)].filter(r=>r.id!==id);save();render();}
 function toggleCard(id){S.expanded.has(id)?S.expanded.delete(id):S.expanded.add(id);render();}
 function saveRec(){
   const r=S.record;if(!r.date){alert('Please select a date!');return;}
-  r.items=compactItems(r.items);
+  if(S.tab!=='frozen')r.items=compactItems(r.items);
+  else{
+    // Frozen: compact by removing zero/empty values
+    const c={};
+    Object.entries(r.items||{}).forEach(([k,v])=>{if(parseFloat(v)>0)c[k]=v;});
+    r.items=c;
+  }
   // If receivables with CWC data, recalculate expected from current items
   if(S.tab==='receivables'&&r.cwc&&r.cwc.rows){
     // Recalculate chicken KG from items
@@ -2707,6 +2871,462 @@ function updItem(p,f,el){
     cell.style.background=ck>0?'#E0F2F1':'#F5FAFA';
   });
   saveDraft(); // auto-save after every input
+}
+
+
+// ─── Publish System ────────────────────────────────
+// Save snapshot button
+function savePublishSnap(){
+  if(!window.$isAdmin){showToast('Admin only');return;}
+  const snap={
+    inventoryIDs:D.inventories.map(r=>r.id),
+    receivableIDs:D.receivables.map(r=>r.id),
+    returnIDs:D.returns.map(r=>r.id),
+    salesIDs:D.sales.map(r=>r.id),
+    frozenIDs:(D.frozen||[]).map(r=>r.id),
+    takenAt:Date.now(),
+  };
+  try{localStorage.setItem('chk-pub-snap',JSON.stringify(snap));}catch(e){}
+  const t=new Date(snap.takenAt).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});
+  showToast('\u{1F4CC} Snapshot saved — '+t);
+}
+window.savePublishSnap=savePublishSnap;
+
+// Publish = diff since last snapshot, send WhatsApp
+async function publishReport(){
+  if(!window.$isAdmin){showToast('Admin only');return;}
+  let prevSnap=null;
+  try{const s=localStorage.getItem('chk-pub-snap');if(s)prevSnap=JSON.parse(s);}catch(e){}
+  const prevIDs={
+    inventories:new Set((prevSnap&&prevSnap.inventoryIDs)||[]),
+    receivables:new Set((prevSnap&&prevSnap.receivableIDs)||[]),
+    returns:new Set((prevSnap&&prevSnap.returnIDs)||[]),
+    sales:new Set((prevSnap&&prevSnap.salesIDs)||[]),
+    frozen:new Set((prevSnap&&prevSnap.frozenIDs)||[]),
+  };
+  const newRecs={
+    inventories:D.inventories.filter(r=>!prevIDs.inventories.has(r.id)),
+    receivables:D.receivables.filter(r=>!prevIDs.receivables.has(r.id)),
+    returns:D.returns.filter(r=>!prevIDs.returns.has(r.id)),
+    sales:D.sales.filter(r=>!prevIDs.sales.has(r.id)),
+    frozen:(D.frozen||[]).filter(r=>!prevIDs.frozen.has(r.id)),
+  };
+  const totalNew=newRecs.inventories.length+newRecs.receivables.length+newRecs.returns.length+newRecs.sales.length+newRecs.frozen.length;
+  const date=new Date().toISOString().split('T')[0];
+  const nowTime=new Date().toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});
+  const prevTime=prevSnap?new Date(prevSnap.takenAt).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}):'Start';
+  const label='Updates '+prevTime+' → '+nowTime+' ('+totalNew+' new)';
+  try{
+    const db=window.$db;
+    await window.$setDoc(window.$doc(db,'published','latest'),{
+      date,label,publishedAt:Date.now(),publishedBy:window.$user?.email||'',
+      snapshot:{inventoryIDs:D.inventories.map(r=>r.id),receivableIDs:D.receivables.map(r=>r.id),returnIDs:D.returns.map(r=>r.id),salesIDs:D.sales.map(r=>r.id),frozenIDs:(D.frozen||[]).map(r=>r.id)},
+      newRecords:{
+        inventories:newRecs.inventories.map(r=>({id:r.id,date:r.date,notes:r.notes||'',kg:Object.values(r.items||{}).reduce((s,v)=>(s+(parseFloat(v.kg)||0)+(parseFloat(v.pcs)||0)*0.5),0)})),
+        receivables:newRecs.receivables.map(r=>({id:r.id,date:r.date,supplier:r.supplier||'',kg:r.grand||0})),
+        returns:newRecs.returns.map(r=>({id:r.id,date:r.date,notes:r.notes||'',kg:Object.values(r.items||{}).reduce((s,v)=>(s+(parseFloat(v.kg)||0)+(parseFloat(v.pcs)||0)*0.5),0)})),
+        sales:newRecs.sales.map(r=>({id:r.id,date:r.date,fileName:r.fileName||''})),
+        frozen:newRecs.frozen.map(r=>({id:r.id,date:r.date,notes:r.notes||'',kg:FROZEN_PRODUCTS.reduce((s,p)=>s+(parseFloat(r.items?.[p.id])||0)*p.kgFactor,0)})),
+      },
+      counts:{newInventory:newRecs.inventories.length,newReceivables:newRecs.receivables.length,newReturns:newRecs.returns.length,newSales:newRecs.sales.length,newFrozen:newRecs.frozen.length}
+    });
+  }catch(e){console.warn('Firebase publish error:',e);}
+  showToast('Published!');
+  setTimeout(()=>sharePublishWhatsApp(date,label,newRecs),300);
+}
+window.publishReport=publishReport;
+
+
+async function sharePublishWhatsApp(date,label,newRecs){
+  try{
+    const nr=newRecs||{inventories:[],receivables:[],returns:[],sales:[],frozen:[]};
+    const totalNew=(nr.inventories?.length||0)+(nr.receivables?.length||0)+(nr.returns?.length||0)+(nr.sales?.length||0)+(nr.frozen?.length||0);
+    
+    // Build WhatsApp message
+    const lines=[];
+    lines.push('*IAT Trading - Inventory*');
+    lines.push('━━━━━━━━━━━━━━━━━━');
+    lines.push('✅ '+label);
+    lines.push('');
+    if(totalNew>0){
+      lines.push('*📊 الجديد منذ آخر نشر:*');
+      if(nr.inventories?.length){
+        lines.push('📦 *Inventory:* +'+nr.inventories.length+' records');
+        nr.inventories.forEach(r=>lines.push('   • '+r.date+(r.notes?' - '+r.notes:'')+(r.kg?' ('+r.kg.toFixed(1)+' kg)':'')));
+      }
+      if(nr.receivables?.length){
+        lines.push('📥 *Receivables:* +'+nr.receivables.length+' records');
+        nr.receivables.forEach(r=>lines.push('   • '+r.date+(r.supplier?' - '+r.supplier:'')+(r.kg?' ('+parseFloat(r.kg).toFixed(1)+' kg)':'')));
+      }
+      if(nr.returns?.length){
+        lines.push('🔄 *Returns:* +'+nr.returns.length+' records');
+        nr.returns.forEach(r=>lines.push('   • '+r.date+(r.notes?' - '+r.notes:'')+(r.kg?' ('+r.kg.toFixed(1)+' kg)':'')));
+      }
+      if(nr.sales?.length){
+        lines.push('📤 *Sales:* +'+nr.sales.length+' records');
+        nr.sales.forEach(r=>lines.push('   • '+r.date+(r.fileName?' - '+r.fileName:'')));
+      }
+      if(nr.frozen?.length){
+        lines.push('❄️ *Frozen:* +'+nr.frozen.length+' records');
+        nr.frozen.forEach(r=>lines.push('   • '+r.date+(r.notes?' - '+r.notes:'')+(r.kg?' ('+r.kg.toFixed(1)+' kg)':'')));
+      }
+    } else {
+      lines.push('لا توجد بيانات جديدة منذ آخر نشر');
+    }
+    lines.push('');
+    lines.push('━━━━━━━━━━━━━━━━━━');
+    lines.push('🕐 '+new Date().toLocaleString('ar-SA'));
+
+    const msg=lines.join('\n');
+    
+    // Try native share first, fallback to wa.me link
+    if(navigator.share){
+      try{
+        await navigator.share({title:'IAT Report '+date,text:msg});
+        return;
+      }catch(e){if(e.name==='AbortError')return;}
+    }
+    // Fallback: open WhatsApp with pre-filled message
+    window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank');
+  }catch(e){showToast('Share error: '+e.message);}
+}
+async function checkPublished(){
+  if(!window.$db||window.$isAdmin)return;
+  try{
+    const snap=await window.$getDoc(window.$doc(window.$db,'published','latest'));
+    if(!snap.exists())return;
+    const pub=snap.data();
+    // Show notification banner
+    const existing=document.getElementById('pub-banner');
+    if(existing)existing.remove();
+    const b=document.createElement('div');
+    b.id='pub-banner';
+    b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9997;background:linear-gradient(90deg,#1B5E20,#2E7D32);color:#fff;padding:8px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,.3)';
+    const counts=pub.counts||{};
+    const newTotal=(counts.newInventory||0)+(counts.newReceivables||0)+(counts.newReturns||0)+(counts.newSales||0)+(counts.newFrozen||0);
+    const newSummary=[];
+    if(counts.newInventory)newSummary.push('📦 +'+counts.newInventory+' Inv');
+    if(counts.newReceivables)newSummary.push('📥 +'+counts.newReceivables+' Rec');
+    if(counts.newReturns)newSummary.push('🔄 +'+counts.newReturns+' Ret');
+    if(counts.newSales)newSummary.push('📤 +'+counts.newSales+' Sales');
+    if(counts.newFrozen)newSummary.push('❄️ +'+counts.newFrozen+' Frz');
+    b.innerHTML=`<span style="font-size:18px">📊</span>
+      <div style="flex:1">
+        <div style="font-size:12px;font-weight:700">${pub.label} — جاهز!</div>
+        <div style="font-size:10px;opacity:.85">${newTotal>0?'الجديد: '+newSummary.join(' · '):'لا توجد بيانات جديدة'}</div>
+      </div>
+      <button onclick="document.getElementById('pub-banner').remove()" style="border:none;background:rgba(255,255,255,.2);color:#fff;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">✕</button>`;
+    document.body.prepend(b);
+  }catch(e){console.log('checkPublished error:',e);}
+}
+window.checkPublished=checkPublished;
+
+
+// ─── Frozen Products ──────────────────────────────
+// Each frozen product: {id, name, unit, kgFactor}
+// unit: 'CTN','KG','PCS', etc. kgFactor: how many KG per unit
+let FROZEN_PRODUCTS=[
+  {id:1,name:'CHI. BREAST 12 KG FRZN (LENA)',unit:'CTN',kgFactor:12},
+  {id:2,name:'CHI. BREAST BRZ. 6*2kg (SUPER FRANGO)',unit:'CTN',kgFactor:12},
+  {id:3,name:'CHI. BREAST FRZN 12kg (Safi)',unit:'CTN',kgFactor:12},
+  {id:4,name:'CHICKEN BREAST TENDERIZED BAL.',unit:'KG',kgFactor:1},
+  {id:5,name:'CHICKEN GRILLER 10*1100gm',unit:'CTN',kgFactor:11},
+  {id:6,name:'CHICKEN THIGH FRZN 12kg B/L/SL (Premium)',unit:'CTN',kgFactor:12},
+  {id:7,name:'CHI. THIGH CHILLED BL/SL',unit:'KG',kgFactor:1},
+  {id:8,name:'FRENCH FRIES',unit:'CTN',kgFactor:10},
+  {id:9,name:'OPTIBIND POWDER',unit:'KG',kgFactor:1},
+  {id:10,name:'T- CHI. BREAST TENDERIZED',unit:'KG',kgFactor:1},
+  {id:11,name:'T-CHICKENCO TENDERIZED 400G',unit:'PCS',kgFactor:0.4},
+  {id:12,name:'T-CHICKENCO TENDERIZED 500g',unit:'PCS',kgFactor:0.5},
+  {id:13,name:'F- CHICKEN MINCED',unit:'KG',kgFactor:1},
+];
+function loadFrozenProducts(){try{const s=localStorage.getItem(SK_FP);if(s)FROZEN_PRODUCTS=JSON.parse(s);}catch(e){}}
+function saveFrozenProducts(){try{localStorage.setItem(SK_FP,JSON.stringify(FROZEN_PRODUCTS));_scheduleSave();}catch(e){}}
+
+// ─── Frozen Tab Render ────────────────────────────
+// ══ Orders Tab ══════════════════════════════════════
+function renderOrdersTab(){
+  const recs=(D.orders||[]).sort((a,b)=>b.date.localeCompare(a.date));
+  const inf=ti('orders');
+  let h=`<div class="card" style="margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span style="font-size:20px">${inf.emoji}</span>
+      <div><div style="font-weight:700;color:${inf.color}">Orders from IAT Orders App</div>
+      <div style="font-size:11px;color:#90A4AE">${recs.length} record(s) — auto-imported from orders app</div></div>
+    </div>`;
+
+  if(!recs.length){
+    h+=`<div style="text-align:center;color:#90A4AE;padding:20px;font-size:13px">No orders imported yet.<br>Use 📤 Inventory button in IAT Orders app.</div>`;
+  }else{
+    h+=recs.map(r=>{
+      const prods=Object.entries(r.items||{}).filter(([,v])=>parseFloat(v.kg||v)||0);
+      const total=prods.reduce((s,[,v])=>s+(parseFloat(v.kg||v)||0),0);
+      return`<div style="border:1px solid ${inf.border};border-radius:8px;margin-bottom:8px;overflow:hidden">
+        <div style="background:${inf.light};padding:8px 12px;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <span style="font-weight:700;color:${inf.color}">${inf.emoji} ${r.date}</span>
+            ${r.notes?`<span style="font-size:11px;color:#546E7A;margin-left:6px">— ${r.notes}</span>`:''}
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span style="font-size:12px;font-weight:700;color:${inf.color}">${total.toFixed(1)} kg</span>
+            <button onclick="deleteOrderRec('${r.id}')" style="background:#FFEBEE;border:none;border-radius:5px;padding:3px 8px;font-size:11px;color:#C62828;cursor:pointer">🗑</button>
+            <button onclick="useOrderInFormula('${r.id}')" style="background:${inf.light};border:1px solid ${inf.border};border-radius:5px;padding:3px 8px;font-size:11px;color:${inf.color};cursor:pointer">+ Formula</button>
+          </div>
+        </div>
+        <table style="border-collapse:collapse;width:100%;font-size:12px">
+          ${prods.map(([p,v],i)=>`
+          <tr style="border-bottom:1px solid #EEE;background:${i%2?'#FAFAFA':'#FFF'}">
+            <td style="padding:5px 10px;color:#37474F">${p}</td>
+            <td style="padding:5px 10px;text-align:right;font-weight:700;color:${inf.color}">${parseFloat(v.kg||v||0).toFixed(2)} kg</td>
+          </tr>`).join('')}
+        </table>
+      </div>`;
+    }).join('');
+  }
+  h+='</div>';
+  return h;
+}
+
+async function deleteOrderRec(id){
+  if(!confirm('Delete this order record?')) return;
+  try{
+    const db=window.$db;
+    await window.$deleteDoc(window.$doc(db,'orders',id));
+    D.orders=(D.orders||[]).filter(r=>r.id!==id);
+    render();showToast('✓ Deleted');
+  }catch(e){showToast('Error: '+e.message);}
+}
+
+function useOrderInFormula(id){
+  // أضف السجل للـ Formula A كـ record
+  const exists=FA.find(op=>op.id===id);
+  if(exists){showToast('Already in Formula A');return;}
+  FA.push({id,op:'+'});
+  saveState();
+  S.tab='formulaA';render();
+  showToast('✓ Added to Formula A');
+}
+
+function renderFrozenTab(){
+  const inf=ti('frozen');
+  if(S.view==='form')return renderFrozenForm();
+  const recs=[...D.frozen].sort((a,b)=>b.date.localeCompare(a.date));
+  let h=`<div class="card" style="border:1.5px solid ${inf.border}">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div>
+        <h2 style="margin:0;font-size:16px;color:${inf.color}">❄️ Frozen</h2>
+        <div style="font-size:11px;color:#78909C">${recs.length} record(s)</div>
+      </div>
+      <button class="btn" style="background:${inf.color};color:#fff;padding:7px 16px" onclick="startNew()">+ New Frozen</button>
+    </div></div>`;
+  recs.forEach(r=>h+=renderFrozenCard(r,inf));
+  return h;
+}
+
+function shareFrozenWA(r){
+  const rows=FROZEN_PRODUCTS.filter(p=>parseFloat(r.items?.[p.id])>0);
+  const totalKg=rows.reduce((s,p)=>s+(parseFloat(r.items?.[p.id])||0)*p.kgFactor,0);
+  const lines=['*❄️ IAT Frozen Inventory*','Date: '+r.date,'Total: '+totalKg.toFixed(2)+' KG',''];
+  rows.forEach(p=>{const qty=parseFloat(r.items?.[p.id])||0;lines.push('• '+p.name+': '+qty+' '+p.unit+' ('+( qty*p.kgFactor).toFixed(2)+' kg)');});
+  if(navigator.share){navigator.share({title:'Frozen '+r.date,text:lines.join('\n')});}
+  else{window.open('https://wa.me/?text='+encodeURIComponent(lines.join('\n')),'_blank');}
+}
+async function shareFrozenPDF(r){
+  const rows=FROZEN_PRODUCTS.filter(p=>parseFloat(r.items?.[p.id])>0);
+  const totalKg=rows.reduce((s,p)=>s+(parseFloat(r.items?.[p.id])||0)*p.kgFactor,0);
+  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+  doc.setFontSize(16);doc.setTextColor(2,119,189);doc.text('IAT Frozen Inventory',14,18);
+  doc.setFontSize(11);doc.setTextColor(0,0,0);
+  doc.text('Date: '+r.date,14,28);doc.text('Total: '+totalKg.toFixed(2)+' KG',14,35);
+  let y=45;
+  doc.setFillColor(2,119,189);doc.rect(14,y,182,7,'F');
+  doc.setTextColor(255,255,255);doc.setFontSize(9);
+  doc.text('Product',16,y+5);doc.text('Qty',110,y+5);doc.text('Unit',135,y+5);doc.text('KG',165,y+5);
+  y+=10;doc.setTextColor(0,0,0);
+  rows.forEach((p,i)=>{
+    if(i%2===0){doc.setFillColor(241,248,233);doc.rect(14,y-4,182,7,'F');}
+    doc.text(p.name.substring(0,40),16,y);
+    const qty=parseFloat(r.items?.[p.id])||0;
+    doc.text(String(qty),110,y);doc.text(p.unit,135,y);doc.text((qty*p.kgFactor).toFixed(2),165,y);
+    y+=8;
+  });
+  doc.save('frozen-'+r.date+'.pdf');
+}
+function renderFrozenCard(r,inf){
+  const totalKg=FROZEN_PRODUCTS.reduce((s,p)=>{
+    const qty=parseFloat(r.items?.[p.id])||0;
+    return s+qty*p.kgFactor;
+  },0);
+  const prods=FROZEN_PRODUCTS.filter(p=>parseFloat(r.items?.[p.id])>0).length;
+  const exp=S.expanded.has(r.id);
+  return`<div class="card" style="border:1.5px solid ${inf.border};margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-weight:700;color:${inf.color};font-size:13px">${r.date}</div>
+        ${r.notes?`<div style="font-size:11px;color:#78909C">${r.notes}</div>`:''}
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <div style="text-align:right">
+          <div style="font-weight:800;color:${inf.color};font-size:14px">${totalKg.toFixed(2)} <small style="font-size:10px">KG</small></div>
+          <div style="font-size:10px;color:#78909C">${prods} products</div>
+        </div>
+        <button onclick="toggleCard('${r.id}')" style="border:none;background:${inf.color};color:#fff;border-radius:7px;width:32px;height:32px;cursor:pointer;font-size:13px">${exp?'▲':'▼'}</button>
+        <button onclick="editRec('${r.id}')" style="border:none;background:#FFF8E1;color:#F57F17;border-radius:7px;width:32px;height:32px;cursor:pointer;font-size:14px">✏️</button>
+        <button onclick="delRec('${r.id}')" style="border:none;background:#FFEBEE;color:#C62828;border-radius:7px;width:32px;height:32px;cursor:pointer;font-size:14px">♻️</button>
+      </div>
+    </div>
+    ${exp?`<div style="display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid ${inf.border}">
+      <button onclick="shareFrozenWA(${JSON.stringify(r).replace(/"/g,'&quot;')})" style="flex:1;padding:7px;border:none;background:#25D366;color:#fff;border-radius:8px;font-size:12px;cursor:pointer">💬 WhatsApp</button>
+      <button onclick="shareFrozenPDF(${JSON.stringify(r).replace(/"/g,'&quot;')})" style="flex:1;padding:7px;border:none;background:#E53935;color:#fff;border-radius:8px;font-size:12px;cursor:pointer">📄 PDF</button>
+    </div>`:''}
+    ${exp?renderFrozenCardDetail(r,inf):''}
+  </div>`;
+}
+
+function renderFrozenCardDetail(r,inf){
+  const rows=FROZEN_PRODUCTS.filter(p=>parseFloat(r.items?.[p.id])>0);
+  if(!rows.length)return'<div style="color:#90A4AE;font-size:11px;padding:8px">No items</div>';
+  return`<div style="margin-top:8px;border-top:1px solid ${inf.border};padding-top:8px">
+    <table style="width:100%;border-collapse:collapse;font-size:11px">
+      <thead><tr style="background:#263238;color:#fff">
+        <th style="padding:4px 6px;text-align:left">Product</th>
+        <th style="padding:4px 6px;text-align:center">Qty</th>
+        <th style="padding:4px 6px;text-align:center">Unit</th>
+        <th style="padding:4px 6px;text-align:center">KG</th>
+      </tr></thead><tbody>
+    ${rows.map((p,i)=>{
+      const qty=parseFloat(r.items?.[p.id])||0;
+      const kg=qty*p.kgFactor;
+      return`<tr style="background:${i%2===0?'#fff':'#F5F5F5'}">
+        <td style="padding:3px 6px;font-weight:600">${p.name}</td>
+        <td style="padding:3px 6px;text-align:center">${qty}</td>
+        <td style="padding:3px 6px;text-align:center;color:#0277BD">${p.unit}</td>
+        <td style="padding:3px 6px;text-align:center;font-weight:700;color:${inf.color}">${kg.toFixed(2)}</td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>
+  </div>`;
+}
+
+function renderFrozenForm(){
+  const inf=ti('frozen');
+  const r=S.record;
+  const totalKg=FROZEN_PRODUCTS.reduce((s,p)=>{
+    const qty=parseFloat(r.items?.[p.id])||0;
+    return s+qty*p.kgFactor;
+  },0);
+  const prods=FROZEN_PRODUCTS.filter(p=>parseFloat(r.items?.[p.id])>0).length;
+  return`<div class="card" style="border:1.5px solid ${inf.border}">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+      <h2 style="margin:0;font-size:15px;color:${inf.color};flex:1">❄️ ${r.id?'Edit':'New'} Frozen</h2>
+      <button class="btn" style="background:#ECEFF1;color:#546E7A" onclick="cancelForm()">← Back</button>
+      <button class="btn" style="background:${inf.color};color:#fff;padding:7px 15px" onclick="saveRec()">💾 Save</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <div style="flex:1">
+        <div style="font-size:10px;color:#78909C;margin-bottom:3px">📅 Date</div>
+        <input type="date" value="${r.date||''}" oninput="S.record.date=this.value;saveDraft()"
+          style="width:100%;padding:8px;border:1.5px solid #E0E0E0;border-radius:8px;font-size:13px">
+      </div>
+      <div style="flex:2">
+        <div style="font-size:10px;color:#78909C;margin-bottom:3px">📝 Notes</div>
+        <input type="text" value="${r.notes||''}" placeholder="Notes..." oninput="S.record.notes=this.value;saveDraft()"
+          style="width:100%;padding:8px;border:1.5px solid #E0E0E0;border-radius:8px;font-size:13px">
+      </div>
+    </div>
+    <div style="background:#E1F5FE;border-radius:8px;padding:8px 12px;margin-bottom:12px;display:flex;gap:16px">
+      <div><span style="font-size:11px;color:#0277BD">Total KG:</span> <strong id="frz-total-kg" style="color:${inf.color};font-size:14px">${totalKg.toFixed(2)}</strong></div>
+      <div><span style="font-size:11px;color:#0277BD">Products:</span> <strong id="frz-total-prods" style="color:${inf.color}">${prods}</strong></div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px">
+      <thead><tr style="background:#263238;color:#fff">
+        <th style="padding:4px 6px;text-align:left">Product</th>
+        <th style="padding:4px 4px;text-align:center;width:70px">Qty</th>
+        <th style="padding:4px 4px;text-align:center;width:40px">Unit</th>
+        <th style="padding:4px 4px;text-align:center;width:55px">KG</th>
+      </tr></thead><tbody>
+    ${FROZEN_PRODUCTS.map((p,i)=>{
+      const qty=parseFloat(r.items?.[p.id])||0;
+      const kg=qty*p.kgFactor;
+      const hasVal=qty>0;
+      return`<tr id="frz-row-${p.id}" style="background:${hasVal?inf.light:i%2===0?'#fff':'#FAFAFA'};border-bottom:1px solid #EFEFEF">
+        <td style="padding:3px 6px;font-weight:${hasVal?700:400};color:${hasVal?inf.color:'#455A64'};font-size:10px">${p.name}</td>
+        <td style="padding:2px 3px"><input type="text" inputmode="decimal" value="${qty||''}" placeholder="0"
+          style="width:100%;text-align:center;border:1.5px solid ${hasVal?'#4FC3F7':'#E0E0E0'};border-radius:5px;font-size:11px;padding:3px;background:${hasVal?'#E1F5FE':'#fff'};font-family:inherit"
+          oninput="if(!S.record.items)S.record.items={};S.record.items[${p.id}]=normalizeNum(this.value);_updateFrozenTotals()" enterkeyhint="next"
+          onblur="if(!S.record.items)S.record.items={};S.record.items[${p.id}]=normalizeNum(this.value);_updateFrozenTotals();saveDraft()"></td>
+        <td style="padding:3px 4px;text-align:center;color:#0277BD;font-weight:600">${p.unit}</td>
+        <td id="frz-kg-${p.id}" style="padding:3px 4px;text-align:center;font-weight:700;color:${hasVal?inf.color:'#CFD8DC'}">${hasVal?kg.toFixed(2):'—'}</td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>
+  </div>`;
+}
+
+// ─── Frozen Settings ──────────────────────────────
+function renderFrozenSettings(){
+  return`<div style="margin-top:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:700;color:#0277BD">❄️ Frozen Products (${FROZEN_PRODUCTS.length})</div>
+      <button class="btn" style="background:#0277BD;color:#fff;font-size:11px" onclick="addFrozenProduct()">+ Add</button>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px">
+      <thead><tr style="background:#263238;color:#fff">
+        <th style="padding:4px 6px;text-align:left">Name</th>
+        <th style="padding:4px 4px;text-align:center;width:45px">Unit</th>
+        <th style="padding:4px 4px;text-align:center;width:50px">KG/Unit</th>
+        <th style="padding:4px 4px;width:30px"></th>
+      </tr></thead><tbody>
+    ${FROZEN_PRODUCTS.map((p,i)=>`<tr style="background:${i%2===0?'#fff':'#F5F5F5'};border-bottom:1px solid #EFEFEF">
+      <td style="padding:2px 4px"><input type="text" value="${p.name}"
+        style="width:100%;border:1px solid #E0E0E0;border-radius:4px;font-size:10px;padding:3px;font-family:inherit"
+        onchange="FROZEN_PRODUCTS[${i}].name=this.value;saveFrozenProducts()"></td>
+      <td style="padding:2px 3px"><input type="text" value="${p.unit}"
+        style="width:100%;border:1px solid #E0E0E0;border-radius:4px;font-size:10px;padding:3px;text-align:center;font-family:inherit"
+        onchange="FROZEN_PRODUCTS[${i}].unit=this.value;saveFrozenProducts()"></td>
+      <td style="padding:2px 3px"><input type="text" inputmode="decimal" value="${p.kgFactor}"
+        style="width:100%;border:1px solid #E0E0E0;border-radius:4px;font-size:10px;padding:3px;text-align:center;font-family:inherit"
+        onchange="FROZEN_PRODUCTS[${i}].kgFactor=parseFloat(this.value)||1;saveFrozenProducts()"></td>
+      <td style="padding:2px 3px;text-align:center"><button onclick="FROZEN_PRODUCTS.splice(${i},1);saveFrozenProducts();render()"
+        style="border:none;background:#FFEBEE;color:#C62828;border-radius:4px;width:24px;height:24px;cursor:pointer;font-size:12px">🗑</button></td>
+    </tr>`).join('')}
+    </tbody></table>
+  </div>`;
+}
+
+function _updateFrozenTotals(){
+  if(!S.record||S.tab!=='frozen')return;
+  const totalKg=FROZEN_PRODUCTS.reduce((s,p)=>{
+    const qty=parseFloat(S.record.items?.[p.id])||0;
+    return s+qty*p.kgFactor;
+  },0);
+  const prods=FROZEN_PRODUCTS.filter(p=>parseFloat(S.record.items?.[p.id])>0).length;
+  const kgEl=document.getElementById('frz-total-kg');
+  const prEl=document.getElementById('frz-total-prods');
+  if(kgEl)kgEl.textContent=totalKg.toFixed(2);
+  if(prEl)prEl.textContent=prods;
+  // Update row highlighting
+  FROZEN_PRODUCTS.forEach(p=>{
+    const qty=parseFloat(S.record.items?.[p.id])||0;
+    const row=document.getElementById('frz-row-'+p.id);
+    if(row){
+      const inf=ti('frozen');
+      row.style.background=qty>0?inf.light:(FROZEN_PRODUCTS.indexOf(p)%2===0?'#fff':'#FAFAFA');
+    }
+    const kgEl2=document.getElementById('frz-kg-'+p.id);
+    if(kgEl2){
+      const kg=qty*p.kgFactor;
+      kgEl2.textContent=qty>0?kg.toFixed(2):'—';
+      kgEl2.style.color=qty>0?ti('frozen').color:'#CFD8DC';
+    }
+  });
+}
+function addFrozenProduct(){
+  const name=prompt('Product name:');if(!name)return;
+  const unit=prompt('Unit (CTN/KG/PCS):','CTN')||'CTN';
+  const kgFactor=parseFloat(prompt('KG per unit:','12'))||12;
+  FROZEN_PRODUCTS.push({id:Date.now(),name,unit,kgFactor});
+  saveFrozenProducts();render();
 }
 
 // ─── Draft Auto-Save ──────────────────────────────
@@ -2917,6 +3537,46 @@ function moveRP(i,d){const ni=i+d;if(ni<0||ni>=RP_DATA.length)return;[RP_DATA[i]
 function addRP(){const l=document.getElementById('rp-new-l')?.value.trim(),p=document.getElementById('rp-new-p')?.value,u=document.getElementById('rp-new-u')?.value||'kg';if(!l||!p){alert('Fill all fields');return;}const key='rp_'+Date.now().toString(36);RP_DATA.push({key,label:l,prod:p,unit:u});saveRP();render();}
 function resetRP(){if(!confirm('Reset cut products to defaults?'))return;RP_DATA=JSON.parse(JSON.stringify(DEFAULT_RP));saveRP();render();}
 // Excel
+function processExcelBoth(buf,name){
+  // Process same Excel file for both Sales (col C) and Day Sales (col D)
+  try{
+    const wb=XLSX.read(buf,{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    let start=1;for(let i=0;i<Math.min(rows.length,5);i++){if(rows[i].some(c=>String(c).toLowerCase().includes('name'))){start=i+1;break;}}
+    // Sales: col C (row[2])
+    const resultS=[],convertedS={},unmatchedS=[];PRODUCTS.forEach(p=>convertedS[p]=0);
+    // Day Sales: col D (row[3])
+    const resultD=[],convertedD={},unmatchedD=[];PRODUCTS.forEach(p=>convertedD[p]=0);
+    for(let i=start;i<rows.length;i++){
+      const row=rows[i];
+      const rn=String(row[1]||'').trim();
+      if(!rn||rn.toLowerCase()==='total')continue;
+      // Sales col C
+      const qtyS=parseFloat(row[2])||0;
+      const mapS=lookupMap(rn);
+      const entryS={name:rn,qty:qtyS,matched:!!mapS,product:mapS?mapS.p:'',multiplier:mapS?mapS.m:0,converted:mapS?(qtyS*mapS.m):0};
+      resultS.push(entryS);
+      if(mapS&&qtyS>0)convertedS[mapS.p]=(convertedS[mapS.p]||0)+(qtyS*mapS.m);
+      else if(qtyS>0)unmatchedS.push({name:rn,qty:qtyS});
+      // Day Sales col D
+      const qtyD=parseFloat(row[3])||0;
+      const mapD=lookupMap(rn);
+      const entryD={name:rn,qty:qtyD,matched:!!mapD,product:mapD?mapD.p:'',multiplier:mapD?mapD.m:0,converted:mapD?(qtyD*mapD.m):0};
+      resultD.push(entryD);
+      if(mapD&&qtyD>0)convertedD[mapD.p]=(convertedD[mapD.p]||0)+(qtyD*mapD.m);
+      else if(qtyD>0)unmatchedD.push({name:rn,qty:qtyD});
+    }
+    UP={step:'result',fileName:name,date:new Date().toISOString().split('T')[0],rows:resultS,converted:convertedS,unmatched:unmatchedS};
+    UPD={step:'result',fileName:name,date:new Date().toISOString().split('T')[0],rows:resultD,converted:convertedD,unmatched:unmatchedD};
+    // Save all Excel names for Sales Map reference
+    const allNames=[...new Set(resultS.map(r=>r.name).filter(n=>n))];
+    try{localStorage.setItem('chk-last-excel-names',JSON.stringify(allNames));}catch(e){}
+    showToast('✅ Loaded Sales (col C) + Day Sales (col D)');
+  }catch(e){alert('Error: '+e.message);}render();
+}
+function handleFileBoth(inp){const f=inp.files[0];if(!f)return;const reader=new FileReader();reader.onload=e=>processExcelBoth(e.target.result,f.name);reader.readAsArrayBuffer(f);}
+function handleDropBoth(e){e.preventDefault();document.getElementById('uz-both')?.classList.remove('drag');const f=e.dataTransfer.files[0];if(!f)return;const reader=new FileReader();reader.onload=ev=>processExcelBoth(ev.target.result,f.name);reader.readAsArrayBuffer(f);}
+
 function processExcel(buf,name){
   try{
     const wb=XLSX.read(buf,{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];
@@ -3006,7 +3666,7 @@ function processExcelDay(buf,name){
     const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
     const result=[],converted={},unmatched=[];PRODUCTS.forEach(p=>converted[p]=0);
     let start=1;for(let i=0;i<Math.min(rows.length,5);i++){if(rows[i].some(c=>String(c).toLowerCase().includes('name'))){start=i+1;break;}}
-    for(let i=start;i<rows.length;i++){const row=rows[i];const rn=String(row[1]||'').trim();const qty=parseFloat(row[2])||0;if(!rn||rn.toLowerCase()==='total')continue;const map=lookupMap(rn);const entry={name:rn,qty,matched:!!map,product:map?map.p:'',multiplier:map?map.m:0,converted:map?(qty*map.m):0};result.push(entry);if(map&&qty>0)converted[map.p]=(converted[map.p]||0)+(qty*map.m);else if(qty>0)unmatched.push({name:rn,qty});}
+    for(let i=start;i<rows.length;i++){const row=rows[i];const rn=String(row[1]||'').trim();const qty=parseFloat(row[3])||0;if(!rn||rn.toLowerCase()==='total')continue;const map=lookupMap(rn);const entry={name:rn,qty,matched:!!map,product:map?map.p:'',multiplier:map?map.m:0,converted:map?(qty*map.m):0};result.push(entry);if(map&&qty>0)converted[map.p]=(converted[map.p]||0)+(qty*map.m);else if(qty>0)unmatched.push({name:rn,qty});}
     UPD={step:'result',fileName:name,date:new Date().toISOString().split('T')[0],rows:result,converted,unmatched};
   }catch(e){alert('Error: '+e.message);UPD.step='upload';}render();
 }
@@ -3035,9 +3695,9 @@ function getFormulaBA(fromDate,toDate){
   const totB=fbOps.length?calcFormula(fbOps):null;
   const ba={};
   PRODUCTS.forEach(p=>{
-    const bKg=totB?(totB[p]?.kg||0):0,bPcs=totB?(totB[p]?.pcs||0):0;
-    const aKg=totA?(totA[p]?.kg||0):0,aPcs=totA?(totA[p]?.pcs||0):0;
-    ba[p]=(bKg+bPcs*0.5)-(aKg+aPcs*0.5);
+    const isPcs=!!C_MAP[p];
+    if(isPcs){ba[p]=(totB?(totB[p]?.pcs||0):0)-(totA?(totA[p]?.pcs||0):0);}
+    else{ba[p]=(totB?(totB[p]?.kg||0):0)-(totA?(totA[p]?.kg||0):0);}
   });
   return ba;
 }
@@ -3049,7 +3709,7 @@ function compactProdItems(items){
   });
   return c;
 }
-function prodTotal(it){return(parseFloat(it?.ba)||0)+(parseFloat(it?.input)||0)-(parseFloat(it?.output)||0)-(parseFloat(it?.waste)||0);}
+function prodTotal(it){return(parseFloat(it?.ba)||0)+(parseFloat(it?.input)||0)+(parseFloat(it?.waste)||0)-(parseFloat(it?.output)||0);}
 
 function updProdVal(p,field,el){
   const v=normalizeNum(el.value);
@@ -3103,23 +3763,42 @@ function renderProductionRows(srch){
     const it=PRO.items[p]||{ba:0,input:'',output:'',waste:''};
     const ba=parseFloat(it.ba)||0;
     const inp=it.input||'',out=it.output||'',wst=it.waste||'';
-    const total=ba+(parseFloat(inp)||0)-(parseFloat(out)||0)-(parseFloat(wst)||0);
-    const is500=p.endsWith(' 500')||p.endsWith(' FF');
-    return`<tr style="background:${idx%2===0?'#fff':'#FAFAFA'};border-bottom:1px solid #EFEFEF">
-      <td style="padding:3px 4px;color:#BDBDBD;font-size:9px;text-align:center">${idx+1}</td>
-      <td style="padding:4px 5px;font-size:11px;font-weight:600;color:${is500?'#9C27B0':'#37474F'}">${p}</td>
-      <td style="padding:4px 5px;text-align:center;font-weight:800;font-size:11px;background:${ba>0?'#E8F5E9':ba<0?'#FFEBEE':'#F5F5F5'};color:${ba>0?'#2E7D32':ba<0?'#C62828':'#90A4AE'}">${ba===0?'—':(ba>0?'+':'')+ba.toFixed(ba%1===0?0:2)}</td>
-      <td style="padding:3px 3px"><input type="text" inputmode="decimal" value="${inp}" placeholder="0"
-        style="width:54px;text-align:center;border:1.5px solid ${inp&&parseFloat(inp)!==0?'#90CAF9':'#E0E0E0'};border-radius:6px;font-size:11px;padding:4px;background:${inp&&parseFloat(inp)!==0?'#E3F2FD':'#fff'};font-family:inherit"
-        oninput="updProdVal('${p.replace(/'/g,"\'")}','input',this)"></td>
-      <td style="padding:3px 3px"><input type="text" inputmode="decimal" value="${out}" placeholder="0"
-        style="width:54px;text-align:center;border:1.5px solid ${out&&parseFloat(out)!==0?'#90CAF9':'#E0E0E0'};border-radius:6px;font-size:11px;padding:4px;background:${out&&parseFloat(out)!==0?'#E3F2FD':'#fff'};font-family:inherit"
-        oninput="updProdVal('${p.replace(/'/g,"\'")}','output',this)"></td>
-      <td style="padding:3px 3px"><input type="text" inputmode="decimal" value="${wst}" placeholder="0"
-        style="width:54px;text-align:center;border:1.5px solid ${wst&&parseFloat(wst)!==0?'#FFB74D':'#E0E0E0'};border-radius:6px;font-size:11px;padding:4px;background:${wst&&parseFloat(wst)!==0?'#FFF3E0':'#fff'};font-family:inherit"
-        oninput="updProdVal('${p.replace(/'/g,"\'")}','waste',this)"></td>
-      <td id="ptot-${idx}" style="padding:4px 5px;text-align:center;font-weight:800;font-size:11px;background:${total>0?'#E8F5E9':total<0?'#FFEBEE':'#F5F5F5'};color:${total>0?'#2E7D32':total<0?'#C62828':'#90A4AE'}">${total===0?'—':(total>0?'+':'')+total.toFixed(total%1===0?0:2)}</td>
-    </tr>`;
+    const total=ba+(parseFloat(inp)||0)+(parseFloat(wst)||0)-(parseFloat(out)||0);
+    const is500=!!C_MAP[p];
+    const pp=p.replace(/'/g,"\\'");
+    const children=PRODUCTS.filter(c=>C_MAP[c]===p);
+    const baComb=is500?null:(ba+children.reduce((s2,c)=>(parseFloat(PRO.items[c]?.ba)||0)*0.5+s2,0));
+    const totalComb=is500?null:(total+children.reduce((s2,c)=>{
+      const ci=PRO.items[c]||{};
+      return s2+((parseFloat(ci.ba)||0)+(parseFloat(ci.input)||0)+(parseFloat(ci.waste)||0)-(parseFloat(ci.output)||0))*0.5;
+    },0));
+    const bg=idx%2===0?'#fff':'#FAFAFA';
+    const isSemi=(PRO.mode||'manual')==='semi';
+    const isAuto=(PRO.mode||'manual')==='auto';
+    const baDisp=ba===0?'—':(ba>0?'+':'')+ba.toFixed(ba%1===0?0:2)+(is500?' p':'');
+    const baCombDisp=is500||baComb===null?'—':baComb===0?'0':(baComb>0?'+':'')+baComb.toFixed(2);
+    const totDisp=total===0?'—':(total>0?'+':'')+total.toFixed(total%1===0?0:2)+(is500?' p':'');
+    const totCombDisp=is500||totalComb===null?'—':totalComb===0?'0':(totalComb>0?'+':'')+totalComb.toFixed(2)+' kg';
+    const roInpOut=isAuto||isSemi?'readonly':'';
+    const roWst=isAuto?'readonly':'';
+    const opInpOut=isAuto||isSemi?'opacity:.5;':'';
+    const opWst=isAuto?'opacity:.5;':'';
+    const wstHandler=isSemi?`onWasteChangeSemi('${pp}',this)`:`updProdVal('${pp}','waste',this)`;
+    const wstBlur=isSemi?`onWasteBlurSemi('${pp}',this)`:'';
+    const inpSt=`width:36px;text-align:center;border:1px solid ${parseFloat(inp)?'#90CAF9':'#E0E0E0'};border-radius:4px;font-size:10px;padding:2px 1px;background:${parseFloat(inp)?'#E3F2FD':'#fff'};font-family:inherit;${opInpOut}`;
+    const outSt=`width:36px;text-align:center;border:1px solid ${parseFloat(out)?'#90CAF9':'#E0E0E0'};border-radius:4px;font-size:10px;padding:2px 1px;background:${parseFloat(out)?'#E3F2FD':'#fff'};font-family:inherit;${opInpOut}`;
+    const wstSt=`width:36px;text-align:center;border:1px solid ${parseFloat(wst)?'#FFB74D':'#E0E0E0'};border-radius:4px;font-size:10px;padding:2px 1px;background:${parseFloat(wst)?'#FFF3E0':'#fff'};font-family:inherit;${opWst}`;
+    return '<tr style="background:'+bg+';border-bottom:1px solid #EFEFEF">'
+      +'<td style="padding:3px 2px;color:#BDBDBD;font-size:9px;text-align:center">'+(idx+1)+'</td>'
+      +'<td style="padding:3px 4px;font-size:10px;font-weight:600;color:'+(is500?'#9C27B0':'#37474F')+';word-break:break-word;line-height:1.2;max-width:70px">'+p+'</td>'
+      +'<td style="padding:3px 2px;text-align:center;font-weight:800;font-size:10px;background:'+(ba>0?'#E8F5E9':ba<0?'#FFEBEE':'#F5F5F5')+';color:'+(ba>0?'#2E7D32':ba<0?'#C62828':'#90A4AE')+'">'+baDisp+'</td>'
+      +'<td style="padding:3px 2px;text-align:center;font-size:9px;background:'+(is500?'#F8F8FF':'#EEF2FF')+';color:'+(is500?'#CFD8DC':baComb>0?'#1565C0':baComb<0?'#C62828':'#9E9E9E')+'">'+baCombDisp+'</td>'
+      +'<td style="padding:1px 2px"><input type="text" inputmode="decimal" value="'+inp+'" placeholder="0" '+roInpOut+' style="'+inpSt+'" oninput="updProdVal(\''+pp+'\',\'input\',this)"></td>'
+      +'<td style="padding:1px 2px"><input type="text" inputmode="decimal" value="'+out+'" placeholder="0" '+roInpOut+' style="'+outSt+'" oninput="updProdVal(\''+pp+'\',\'output\',this)"></td>'
+      +'<td style="padding:1px 2px"><input type="text" inputmode="decimal" value="'+wst+'" placeholder="0" '+roWst+' style="'+wstSt+'" oninput="'+wstHandler+'" onblur="'+wstBlur+'"></td>'
+      +'<td id="ptot-'+idx+'" style="padding:3px 2px;text-align:center;font-weight:800;font-size:10px;background:'+(total>0?'#E8F5E9':total<0?'#FFEBEE':'#F5F5F5')+';color:'+(total>0?'#2E7D32':total<0?'#C62828':'#90A4AE')+'">'+totDisp+'</td>'
+      +'<td id="ptotc-'+idx+'" style="padding:3px 2px;text-align:center;font-size:9px;background:'+(is500?'#F8F8FF':'#E8F5E9AA')+';color:'+(is500?'#CFD8DC':totalComb>0?'#1B5E20':totalComb<0?'#C62828':'#9E9E9E')+'">'+totCombDisp+'</td>'
+      +'</tr>';
   }).join('');
 }
 function updProdSearch(v){
@@ -3162,8 +3841,13 @@ function renderProductionForm(){
   return`<div class="card" style="border:1.5px solid ${inf.border}">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:11px;flex-wrap:wrap;gap:6px">
       <h2 style="margin:0;font-size:14px;color:${inf.color}">${inf.emoji} ${_editProdId?'Edit':'New'} Production</h2>
-      <div style="display:flex;gap:5px">
+      <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
         <button class="btn" style="background:#ECEFF1;color:#546E7A" onclick="cancelProduction()">← Back</button>
+        <div style="display:flex;gap:2px;background:#F0F0F0;border-radius:8px;padding:3px">
+          <button id="pmode-auto" onclick="setProdMode('auto')" style="border:none;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;transition:.15s;background:${'auto'===(PRO.mode||'manual')?'#1B3A4B':'#F0F0F0'};color:${'auto'===(PRO.mode||'manual')?'#fff':'#546E7A'};font-weight:${'auto'===(PRO.mode||'manual')?700:400}">⚡ Auto</button>
+          <button id="pmode-semi" onclick="setProdMode('semi')" style="border:none;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;transition:.15s;background:${'semi'===(PRO.mode||'manual')?'#1B3A4B':'#F0F0F0'};color:${'semi'===(PRO.mode||'manual')?'#fff':'#546E7A'};font-weight:${'semi'===(PRO.mode||'manual')?700:400}">⚙️ Semi</button>
+          <button id="pmode-manual" onclick="setProdMode('manual')" style="border:none;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;transition:.15s;background:${'manual'===(PRO.mode||'manual')?'#1B3A4B':'#F0F0F0'};color:${'manual'===(PRO.mode||'manual')?'#fff':'#546E7A'};font-weight:${'manual'===(PRO.mode||'manual')?700:400}">✏️ Manual</button>
+        </div>
         <button class="btn" style="background:${inf.color};color:#fff;padding:7px 15px" onclick="saveProductionRec()">💾 Save</button>
       </div>
     </div>
@@ -3215,15 +3899,17 @@ function renderProductionForm(){
   <div class="card">
     <input class="srch" id="prod-srch-inp" type="text" placeholder="🔍 Search..." value="${S.pSearch||''}" oninput="updProdSearch(this.value)" style="margin-bottom:8px;width:100%">
     <div style="overflow-x:auto">
-    <table style="width:100%;border-collapse:collapse">
+    <table style="border-collapse:collapse;width:100%">
       <thead><tr style="background:${inf.color};color:#fff">
-        <th style="padding:4px 5px;font-size:10px;text-align:center;width:20px">#</th>
-        <th style="padding:4px 5px;font-size:10px;text-align:left">Product</th>
-        <th style="padding:4px 5px;font-size:10px;text-align:center;width:56px;background:#BF360C">B−A</th>
-        <th style="padding:4px 5px;font-size:10px;text-align:center;width:60px">Input</th>
-        <th style="padding:4px 5px;font-size:10px;text-align:center;width:60px">Output</th>
-        <th style="padding:4px 5px;font-size:10px;text-align:center;width:60px;background:#E65100">Waste</th>
-        <th style="padding:4px 5px;font-size:10px;text-align:center;width:56px;background:#1B5E20">Total</th>
+        <th style="padding:3px 2px;font-size:9px;text-align:center">#</th>
+        <th style="padding:3px 4px;font-size:9px;text-align:left">Product</th>
+        <th style="padding:3px 2px;font-size:9px;text-align:center;background:#BF360C;white-space:nowrap">B−A</th>
+        <th style="padding:3px 2px;font-size:9px;text-align:center;background:#BF360C99;white-space:nowrap">B−A<br>Comb</th>
+        <th style="padding:3px 2px;font-size:9px;text-align:center;white-space:nowrap">In</th>
+        <th style="padding:3px 2px;font-size:9px;text-align:center;white-space:nowrap">Out</th>
+        <th style="padding:3px 2px;font-size:9px;text-align:center;background:#E65100;white-space:nowrap">Wst</th>
+        <th style="padding:3px 2px;font-size:9px;text-align:center;background:#1B5E20;white-space:nowrap">Tot</th>
+        <th style="padding:3px 2px;font-size:9px;text-align:center;background:#1B5E2099;white-space:nowrap">Tot<br>Comb</th>
       </tr></thead>
       <tbody id="prod-tbody">${renderProductionRows(S.pSearch||'')}</tbody>
     </table>
@@ -3902,6 +4588,11 @@ function showHdrMenu(){
     +'<div style="padding:4px 14px;font-size:10px;color:#90A4AE;font-weight:600">LOCAL BACKUP</div>'
     +'<button onclick="exportData();this.closest(\'#hdr-menu\').remove()" style="width:100%;padding:9px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px"><span>💾</span> Save JSON file</button>'
     +'<label style="width:100%;padding:9px 14px;display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><span>📂</span> Restore from file<input type="file" accept=".json" onchange="importData(this);document.getElementById(\'hdr-menu\')?.remove()" style="display:none"></label>'
+    +'<div style="height:1px;background:#ECEFF1;margin:4px 0"></div>'
+    +`<div style="padding:5px 14px 3px"><div style="font-size:10px;color:#90A4AE">${window.$isAdmin?'👑 Admin':'👁 View Only'}</div><div style="font-size:11px;font-weight:600;color:#1B3A4B;word-break:break-all">${window.$user?.email||'—'}</div></div>`
+    +(window.$isAdmin?'<button onclick="showUserMgmt();this.closest(\'#hdr-menu\').remove()" style="width:100%;padding:9px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px"><span>👥</span> User Management</button>':'')
+    +(window.$isAdmin?'<button onclick="publishReport();this.closest(\'#hdr-menu\').remove()" style="width:100%;padding:9px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;color:#1B5E20;font-weight:600"><span>📤</span> Publish Report</button>':'')
+    +'<button onclick="_fbSignOut();this.closest(\'#hdr-menu\').remove()" style="width:100%;padding:9px 14px;border:none;background:none;text-align:left;font-size:13px;cursor:pointer;color:#C62828;display:flex;align-items:center;gap:8px"><span>🚪</span> Sign Out</button>'
     +'</div>';
   document.body.appendChild(m);
   setTimeout(()=>document.addEventListener('click',function h(e){if(!m.contains(e.target)){m.remove();document.removeEventListener('click',h);}},true),100);
@@ -3915,7 +4606,7 @@ function saveAndOpenOneDrive(){
   },800);
 }
 function exportData(){
-  const data={version:3,exportDate:new Date().toISOString(),PRODUCTS,MD,SMD,SH_DATA,D,FA,FB};
+  const data={version:4,exportDate:new Date().toISOString(),PRODUCTS,MD,SMD,SH_DATA,D,FA,FB,FROZEN_PRODUCTS,NWC_TYPES,RP_DATA};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const fname='chicken-inventory-'+new Date().toISOString().split('T')[0]+'.json';
@@ -3945,6 +4636,8 @@ function odGetToken(){
 }
 
 async function odLogin(action){
+  // Clear any stale verifier/state from previous incomplete login attempts
+  localStorage.removeItem('od-v');localStorage.removeItem('od-s');localStorage.removeItem('od-p');
   const v=odRandStr(64),s=odRandStr(16);
   const ch=await odChallenge(v);
   localStorage.setItem('od-v',v);localStorage.setItem('od-s',s);localStorage.setItem('od-p',action);
@@ -3958,6 +4651,8 @@ async function odLogin(action){
 }
 
 async function checkODCallback(){
+  // Prevent duplicate execution (e.g. Firebase causing re-render/re-call)
+  if(window._odCallbackRunning)return;
   // SPA apps return code in fragment (#code=XXX)
   const hash=window.location.hash;
   const hs=new URLSearchParams(hash.startsWith('#')?hash.slice(1):hash);
@@ -3974,6 +4669,9 @@ async function checkODCallback(){
   }
   if(!code)return;
 
+  window._odCallbackRunning=true;
+  // Save verifier BEFORE clearing URL (in case of race condition)
+  const savedVerifier=localStorage.getItem('od-v')||'';
   // Clear URL
   window.history.replaceState({},'',window.location.pathname);
   // State check skipped - multiple login attempts can cause mismatch
@@ -3986,7 +4684,7 @@ async function checkODCallback(){
       body:new URLSearchParams({
         client_id:OD_CLIENT_ID,grant_type:'authorization_code',
         code,redirect_uri:OD_REDIRECT,
-        code_verifier:localStorage.getItem('od-v')||''
+        code_verifier:savedVerifier
       }).toString()
     });
     const t=await r.json();
@@ -4005,10 +4703,23 @@ async function checkODCallback(){
     else alert('✅ Logged in! Now press ☁️ to save.');
   }catch(e){
     alert('❌ Network error:\n'+e.message);
+  }finally{
+    window._odCallbackRunning=false;
   }
 }
 
 // Debug helper — shows what's in URL + localStorage
+function odForceReset(){
+  if(!confirm('Reset OneDrive connection?\nYou will need to log in again.'))return;
+  localStorage.removeItem('od-at');
+  localStorage.removeItem('od-ate');
+  localStorage.removeItem('od-rt');
+  localStorage.removeItem('od-v');
+  localStorage.removeItem('od-s');
+  localStorage.removeItem('od-p');
+  showToast('🔄 OneDrive reset! Press ☁️ to login again');
+}
+window.odForceReset=odForceReset;
 function odDebug(){
   const s=window.location.search;
   const h=window.location.hash;
@@ -4074,13 +4785,18 @@ function applyBackup(data){
   if(data.MD){MD=data.MD;saveMapping();}
   if(data.SMD){SMD=data.SMD;saveStockMapping();}
   if(data.SH_DATA){SH_DATA=data.SH_DATA;saveSH();}
-  if(data.D){D={inventories:[],receivables:[],returns:[],sales:[],daySales:[],stockSummaries:[],waste:[],production:[],...data.D};save();}
+  if(data.D){D={inventories:[],receivables:[],returns:[],sales:[],daySales:[],stockSummaries:[],waste:[],production:[],frozen:[],...data.D};
+    if(!D.frozen)D.frozen=[]; // ensure frozen exists even from old backups
+    save();}
+  if(data.FROZEN_PRODUCTS&&data.FROZEN_PRODUCTS.length){FROZEN_PRODUCTS=data.FROZEN_PRODUCTS;saveFrozenProducts();}
+  if(data.NWC_TYPES&&data.NWC_TYPES.length){NWC_TYPES=data.NWC_TYPES;saveNWCTypes();}
+  if(data.RP_DATA){RP_DATA=data.RP_DATA;saveRP();}
   FA=data.FA||[];FB=data.FB||[];
   saveFormulas();recompute();render();
 }
 
 function getBackupData(){
-  return JSON.stringify({version:3,exportDate:new Date().toISOString(),PRODUCTS,MD,SMD,SH_DATA,D,FA,FB},null,2);
+  return JSON.stringify({version:4,exportDate:new Date().toISOString(),PRODUCTS,MD,SMD,SH_DATA,D,FA,FB,FROZEN_PRODUCTS,NWC_TYPES,RP_DATA},null,2);
 }
 function getODUser(){return'';}
 
@@ -4230,11 +4946,335 @@ function importData(input){
   reader.readAsText(f);
 }
 
+
+// ═══════════════════════════════════════════════════
+// FIREBASE AUTH & SYNC
+// ═══════════════════════════════════════════════════
+
+// ── Login screen ────────────────────────────────────
+function _showLogin(){
+  if(document.getElementById('fb-login-screen'))return;
+  document.querySelector('.fb-view-badge')?.remove();
+  const logoEl=document.querySelector('#app img, header img');
+  const logoSrc=logoEl?logoEl.src:'';
+  const d=document.createElement('div');
+  d.id='fb-login-screen';
+  d.innerHTML=`<div class="fb-box">
+    ${logoSrc?`<img class="fb-logo" src="${logoSrc}">`:'<div style="font-size:48px;margin-bottom:8px">🐔</div>'}
+    <div class="fb-title">IAT Inventory</div>
+    <div class="fb-sub">I A T Trading — Stock Management</div>
+    <input class="fb-inp" id="fbe" type="email" placeholder="Email" autocomplete="email" enterkeyhint="next">
+    <input class="fb-inp" id="fbp" type="password" placeholder="Password" autocomplete="current-password" enterkeyhint="done">
+    <button class="fb-btn" onclick="_doLogin()">🔐 Sign In</button>
+    <div class="fb-err" id="fb-err"></div>
+  </div>`;
+  document.body.appendChild(d);
+  setTimeout(()=>document.getElementById('fbe')?.focus(),150);
+  document.getElementById('fbe').onkeydown=e=>{if(e.key==='Enter')document.getElementById('fbp')?.focus();};
+  document.getElementById('fbp').onkeydown=e=>{if(e.key==='Enter')_doLogin();};
+}
+window._showLogin=_showLogin;
+
+async function _doLogin(){
+  const e=document.getElementById('fbe')?.value?.trim();
+  const p=document.getElementById('fbp')?.value;
+  const err=document.getElementById('fb-err');
+  if(!e||!p){err.textContent='Please enter email and password';return;}
+  err.textContent='Signing in...';
+  try{
+    await window.$signIn(e,p);
+  }catch(ex){
+    const c=ex.code;
+    err.textContent=c==='auth/invalid-credential'||c==='auth/wrong-password'||c==='auth/user-not-found'
+      ?'❌ Invalid email or password'
+      :c==='auth/too-many-requests'?'⚠️ Too many attempts. Try later.'
+      :'Error: '+ex.message;
+  }
+}
+window._doLogin=_doLogin;
+
+// ── Boot after login ────────────────────────────────
+async function _fbBoot(){
+  showToast('☁️ Loading...');
+  try{
+    // Always load from admin's data
+    const adminId=await _getAdminId();
+    if(!adminId){showToast('⚠️ No admin data found');render();return;}
+    window.$adminId=adminId;
+    await _loadAdminData(adminId);
+    // Show view-only badge if not admin
+    if(window.$isView){
+      document.querySelector('.fb-view-badge')?.remove();
+      const b=document.createElement('div');
+      b.className='fb-view-badge';
+      b.textContent='👁 VIEW ONLY — Changes are not saved';
+      document.body.prepend(b);
+    }
+    showToast(window.$isAdmin?'✅ Admin mode':'👁 View-only mode');
+    if(!window.$isAdmin)setTimeout(checkPublished,1500);
+  }catch(ex){
+    console.error(ex);showToast('⚠️ Load error');
+  }
+  render();
+  setTimeout(checkDraft,400);
+}
+window._fbBoot=_fbBoot;
+
+// Get admin UID from Firestore (stored under a known doc)
+async function _getAdminId(){
+  // Admin stores their own UID in a public doc so view-users can find it
+  if(window.$isAdmin){
+    // Save admin's own UID so view users can find it
+    await window.$setDoc(window.$doc(window.$db,'config','admin'),{uid:window.$user.uid,email:window.$user.email});
+    return window.$user.uid;
+  } else {
+    // View user reads admin UID from config
+    const snap=await window.$getDoc(window.$doc(window.$db,'config','admin'));
+    return snap.exists()?snap.data().uid:null;
+  }
+}
+
+async function _loadAdminData(adminId){
+  const db=window.$db;
+  const mainSnap=await window.$getDoc(window.$doc(db,'users',adminId,'data','main'));
+  if(mainSnap.exists()){
+    // Firebase has data - load it
+    const d=mainSnap.data();
+    if(d.D)D={inventories:[],receivables:[],returns:[],sales:[],daySales:[],stockSummaries:[],waste:[],production:[],frozen:[],orders:[],...d.D};
+
+    // تحميل orders من collection منفصل
+    try{
+      const ordSnap=await window.$getDocs(window.$col(db,'orders'));
+      D.orders=ordSnap.docs.map(d=>({...d.data()})).sort((a,b)=>b.date.localeCompare(a.date));
+    }catch(e){D.orders=[];}
+    if(d.FA)FA=d.FA;if(d.FB)FB=d.FB;
+    if(d.PRODUCTS&&d.PRODUCTS.length)PRODUCTS=d.PRODUCTS;
+    if(d.FROZEN_PRODUCTS&&d.FROZEN_PRODUCTS.length)FROZEN_PRODUCTS=d.FROZEN_PRODUCTS;
+    if(d.MD)MD=d.MD;if(d.SMD)SMD=d.SMD;
+    recompute();
+  } else if(window.$isAdmin){
+    // Firebase empty - upload local data to Firebase now
+    showToast('☁️ Uploading local data to Firebase...');
+    await _fbSaveNow();
+    showToast('✅ Local data uploaded to Firebase!');
+  }
+  const settSnap=await window.$getDoc(window.$doc(db,'users',adminId,'data','settings'));
+  if(settSnap.exists()){
+    const s=settSnap.data();
+    if(s.NWC_TYPES&&s.NWC_TYPES.length)NWC_TYPES=s.NWC_TYPES;
+    if(s.RP_DATA)RP_DATA=s.RP_DATA;
+    if(s.SH_DATA)SH_DATA=s.SH_DATA;
+  } else if(window.$isAdmin){
+    // Upload settings too
+    await window.$setDoc(window.$doc(db,'users',adminId,'data','settings'),{
+      NWC_TYPES,RP_DATA,SH_DATA,updatedAt:Date.now()
+    });
+  }
+}
+window._loadAdminData=_loadAdminData;
+
+// ── Firebase save (admin only) ──────────────────────
+let _saveTimer=null;
+function _scheduleSave(){
+  if(!window.$isAdmin)return; // View-only: never save
+  clearTimeout(_saveTimer);
+  _saveTimer=setTimeout(_fbSaveNow,1500);
+}
+async function _fbSaveNow(){
+  if(!window.$isAdmin||!window.$user)return;
+  const uid=window.$user.uid;
+  try{
+    await window.$setDoc(window.$doc(window.$db,'users',uid,'data','main'),{
+      D:JSON.parse(JSON.stringify(D)),FA,FB,PRODUCTS,MD,SMD,FROZEN_PRODUCTS,updatedAt:Date.now()
+    });
+    await window.$setDoc(window.$doc(window.$db,'users',uid,'data','settings'),{
+      NWC_TYPES,RP_DATA,SH_DATA,updatedAt:Date.now()
+    });
+  }catch(e){console.error('Save error:',e);}
+}
+window._fbSaveNow=_fbSaveNow;
+
+// ── Sign out ────────────────────────────────────────
+async function _fbSignOut(){
+  if(!confirm('Sign out?'))return;
+  await window.$signOut();
+  location.reload();
+}
+window._fbSignOut=_fbSignOut;
+
+// ── User Management (Admin only) ────────────────────
+async function showUserMgmt(){
+  document.getElementById('user-mgmt-modal')?.remove();
+  if(!window.$isAdmin){showToast('⚠️ Admin only');return;}
+  // Get existing view users from Firestore
+  let users=[];
+  try{
+    const snap=await window.$getDocs(window.$col(window.$db,'config','admin','viewUsers'?window.$col(window.$db,'viewUsers'):(()=>{throw 0})()));
+  }catch(e){}
+  try{
+    const snap=await window.$getDocs(window.$col(window.$db,'viewUsers'));
+    snap.forEach(d=>users.push({id:d.id,...d.data()}));
+  }catch(e){}
+
+  const m=document.createElement('div');
+  m.id='user-mgmt-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  m.innerHTML=`<div style="background:#fff;border-radius:14px;padding:18px;width:100%;max-width:380px;max-height:85vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:15px;font-weight:800;color:#1B3A4B">👥 User Management</div>
+      <button onclick="document.getElementById('user-mgmt-modal').remove()" style="border:none;background:none;font-size:22px;cursor:pointer">×</button>
+    </div>
+    <div style="background:#E8F5E9;border-radius:9px;padding:10px 12px;margin-bottom:14px;font-size:12px">
+      <div style="font-weight:700;color:#2E7D32">👑 Admin Account</div>
+      <div style="color:#1B5E20">${window.$user?.email}</div>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:#546E7A;margin-bottom:8px">ADD VIEW-ONLY USER</div>
+    <input id="new-user-email" class="fi" type="email" placeholder="Email" style="width:100%;margin-bottom:8px" enterkeyhint="next">
+    <input id="new-user-pass" class="fi" type="text" placeholder="Password (min 6 chars)" style="width:100%;margin-bottom:10px" enterkeyhint="done">
+    <button onclick="_addViewUser()" style="width:100%;padding:10px;background:#1B3A4B;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:16px">+ Add View User</button>
+    <div id="user-list-area">
+      ${users.length===0?'<div style="text-align:center;color:#90A4AE;font-size:12px;padding:10px">No view users yet</div>':
+        users.map(u=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#F5F5F5;border-radius:8px;margin-bottom:6px">
+          <div>
+            <div style="font-size:12px;font-weight:600">${u.email}</div>
+            <div style="font-size:10px;color:#90A4AE">👁 View Only</div>
+          </div>
+          <button onclick="_delViewUser('${u.id}','${u.email}')" style="border:none;background:#FFEBEE;color:#C62828;border-radius:6px;padding:5px 9px;font-size:12px;cursor:pointer">🗑</button>
+        </div>`).join('')}
+    </div>
+    <div id="user-mgmt-msg" style="text-align:center;font-size:12px;color:#2E7D32;margin-top:8px"></div>
+  </div>`;
+  document.body.appendChild(m);
+}
+window.showUserMgmt=showUserMgmt;
+
+async function _addViewUser(){
+  const email=document.getElementById('new-user-email')?.value?.trim();
+  const pass=document.getElementById('new-user-pass')?.value?.trim();
+  const msg=document.getElementById('user-mgmt-msg');
+  if(!email||!pass){if(msg)msg.textContent='Please enter email and password';return;}
+  if(pass.length<6){if(msg)msg.textContent='Password must be at least 6 characters';return;}
+  if(msg)msg.textContent='Creating user...';
+  try{
+    // Create auth user
+    const cred=await window.$createUser(email,pass);
+    // Store in viewUsers collection
+    await window.$setDoc(window.$doc(window.$db,'viewUsers',cred.user.uid),{
+      email,role:'view',createdAt:Date.now(),createdBy:window.$user.email
+    });
+    if(msg)msg.textContent='✅ User created: '+email;
+    document.getElementById('new-user-email').value='';
+    document.getElementById('new-user-pass').value='';
+    // Refresh list
+    setTimeout(showUserMgmt,800);
+  }catch(e){
+    if(msg)msg.textContent='Error: '+(e.code==='auth/email-already-in-use'?'Email already exists':e.message);
+  }
+}
+window._addViewUser=_addViewUser;
+
+async function _delViewUser(uid,email){
+  if(!confirm('Delete user: '+email+'?'))return;
+  try{
+    await window.$deleteDoc(window.$doc(window.$db,'viewUsers',uid));
+    showToast('🗑 User deleted');
+    setTimeout(showUserMgmt,500);
+  }catch(e){showToast('Error: '+e.message);}
+}
+window._delViewUser=_delViewUser;
+
+
+// ─── Production Mode ──────────────────────────────
+function setProdMode(mode){
+  PRO.mode=mode;
+  // Apply auto/semi logic
+  const m=mode||'manual';
+  PRODUCTS.forEach(p=>{
+    const it=PRO.items[p];
+    if(!it||it.ba===0)return;
+    const ba=parseFloat(it.ba)||0;
+    if(m==='auto'){
+      if(ba<0){PRO.items[p].input=Math.abs(ba).toFixed(2);PRO.items[p].output='';}
+      else{PRO.items[p].input='';PRO.items[p].output=ba.toFixed(2);}
+      PRO.items[p].waste='';
+    } else if(m==='semi'){
+      const wst=parseFloat(it.waste)||0;
+      if(ba<0){PRO.items[p].input=Math.max(0,Math.abs(ba)-wst).toFixed(2);PRO.items[p].output='';}
+      else{PRO.items[p].input='';PRO.items[p].output=(ba+wst).toFixed(2);}
+    }
+  });
+  const tbody=document.getElementById('prod-tbody');
+  if(tbody)tbody.innerHTML=renderProductionRows(S.pSearch||'');
+  updateProductionTotals();
+  ['auto','semi','manual'].forEach(m2=>{
+    const btn=document.getElementById('pmode-'+m2);
+    if(!btn)return;
+    const active=m2===mode;
+    btn.style.background=active?'#1B3A4B':'#ECEFF1';
+    btn.style.color=active?'#fff':'#546E7A';
+    btn.style.fontWeight=active?'700':'400';
+  });
+}
+function onWasteChangeSemi(p,el){
+  // Just save waste value while typing (don't recalculate yet)
+  const v=normalizeNum(el.value);
+  if(v!==el.value){
+    const pos=el.selectionStart;el.value=v;
+    try{el.setSelectionRange(pos,pos);}catch(e){}
+  }
+  if(!PRO.items[p])PRO.items[p]={ba:0,input:'',output:'',waste:''};
+  PRO.items[p].waste=v;
+  saveDraft();
+}
+function onWasteBlurSemi(p,el){
+  // On blur: recalculate input/output based on waste
+  if((PRO.mode||'manual')!=='semi')return;
+  const v=normalizeNum(el.value);
+  if(!PRO.items[p])PRO.items[p]={ba:0,input:'',output:'',waste:''};
+  PRO.items[p].waste=v;
+  const wst=parseFloat(v)||0;
+  const inp=parseFloat(PRO.items[p].input)||0;
+  const out=parseFloat(PRO.items[p].output)||0;
+  if(inp>0){
+    // Has input: subtract waste from input
+    const newInp=Math.max(0,inp-wst);
+    PRO.items[p].input=newInp>0?newInp.toFixed(2):'';
+    PRO.items[p].output='';
+  } else if(out>0){
+    // Has output: add waste to output
+    const newOut=out+wst;
+    PRO.items[p].output=newOut>0?newOut.toFixed(2):'';
+    PRO.items[p].input='';
+  } else {
+    // Nothing yet - use B-A logic
+    const ba=parseFloat(PRO.items[p].ba)||0;
+    if(ba<0){PRO.items[p].input=Math.max(0,Math.abs(ba)-wst).toFixed(2);PRO.items[p].output='';}
+    else if(ba>0){PRO.items[p].input='';PRO.items[p].output=(ba+wst).toFixed(2);}
+  }
+  // Update cells directly
+  const idx=PRODUCTS.indexOf(p);
+  const tr=el.closest('tr');
+  const inpEl=tr?.querySelector('td:nth-child(5) input');
+  const outEl=tr?.querySelector('td:nth-child(6) input');
+  if(inpEl){inpEl.value=PRO.items[p].input||'';inpEl.style.borderColor=parseFloat(PRO.items[p].input)?'#90CAF9':'#E0E0E0';inpEl.style.background=parseFloat(PRO.items[p].input)?'#E3F2FD':'#fff';}
+  if(outEl){outEl.value=PRO.items[p].output||'';outEl.style.borderColor=parseFloat(PRO.items[p].output)?'#90CAF9':'#E0E0E0';outEl.style.background=parseFloat(PRO.items[p].output)?'#E3F2FD':'#fff';}
+  const total=prodTotal(PRO.items[p]);
+  const totEl=document.getElementById('ptot-'+idx);
+  if(totEl){
+    const is500=!!C_MAP[p];
+    totEl.textContent=total===0?'—':(total>0?'+':'')+total.toFixed(total%1===0?0:2)+(is500?' p':'');
+    totEl.style.color=total>0?'#2E7D32':total<0?'#C62828':'#90A4AE';
+    totEl.style.background=total>0?'#E8F5E9':total<0?'#FFEBEE':'#F5F5F5';
+  }
+  updateProductionTotals();
+  saveDraft();
+}
 // ═══ BOOT ════════════════════════════════════════════
-loadProducts();loadMapping();loadStockMapping();loadSH();loadRP();loadNWCTypes();load();loadFormulas();migrateCompact();
-render(); // render first so DOM is ready
-checkODCallback(); // then handle Microsoft redirect callback
-setTimeout(checkDraft,400); // check for unsaved draft after render
+// Load local defaults first
+loadProducts();loadMapping();loadStockMapping();loadSH();loadRP();loadNWCTypes();loadFrozenProducts();load();loadFormulas();migrateCompact();
+checkODCallback();
+// Show login - Firebase onAuthStateChanged handles the rest
+_showLogin();
 </script>
 </body>
 </html>

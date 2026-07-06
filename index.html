@@ -932,7 +932,9 @@ function getRCTotals(){
     const v=parseFloat(RC.cuts[c.key])||0;if(!v)return;
     cutsKG+=c.unit==='pcs'?v*0.5:v;
   });
-  return{chickenKG,totalCTN,cutsKG,grand:chickenKG+cutsKG};
+  const directKg=parseFloat(RC.directKg)||0;
+  const totalChicken=chickenKG+directKg;
+  return{chickenKG:totalChicken,totalCTN,cutsKG,grand:totalChicken+cutsKG,directKg};
 }
 function updRC(){
   requestAnimationFrame(()=>{
@@ -1006,6 +1008,13 @@ function renderReceiptCalc(){
   </div>
   <div style="flex:1;min-width:185px"><div class="card">
       <div style="font-size:11px;font-weight:700;color:#1565C0;margin-bottom:7px">🐔 Whole Chicken (CTN)</div>
+      <div style="display:flex;align-items:center;gap:6px;padding:5px 7px;background:#E3F2FD;border-radius:7px;margin-bottom:6px">
+        <span style="font-size:10px;color:#1565C0;font-weight:700;min-width:70px">Direct KG:</span>
+        <input class="fi" type="text" inputmode="decimal" placeholder="0.00" value="${RC.directKg||''}" 
+          style="flex:1;font-size:14px;font-weight:700;text-align:center;border:1.5px solid #1565C0"
+          oninput="RC.directKg=normalizeNum(this.value)" onblur="updRC()">
+        <span style="font-size:10px;color:#1565C0">KG</span>
+      </div>
       ${sizeHTML}
     </div></div>
   </div>
@@ -1032,6 +1041,7 @@ function saveReceiptAsRec(){
   }
   // Save non-empty CTN sizes
   const ctns={};Object.entries(RC.ctns).forEach(([s,v])=>{if(parseFloat(v)>0)ctns[s]=parseFloat(v);});
+  if(RC.directKg&&parseFloat(RC.directKg)>0)r.directKg=RC.directKg; else delete r.directKg;
   // Save CWC verification if available
   const cwcData=CWC_ROWS.filter(row=>parseFloat(row.ctns)>0&&parseFloat(row.gross)>0).map(row=>{
     const res=calcCWCRow(row);
@@ -2687,7 +2697,7 @@ function editRec(id){
     _editRecId=id;
     const sup=r.notes?r.notes.replace(/^Receivables\s*[—\-]\s*/,'').trim():'';
     RC={supplier:sup,date:r.date,temp:r.temp||'',ctns:{...(r.ctns||{})},
-        sizePcs:{...(r.sizePcs||{})},smallPcs:RC.smallPcs||10,largePcs:RC.largePcs||8,cuts:{},extraItems:{}};
+        sizePcs:{...(r.sizePcs||{})},smallPcs:RC.smallPcs||10,largePcs:RC.largePcs||8,cuts:{},extraItems:{},directKg:r.directKg||''};
     // Load all items into extraItems (excluding chicken which comes from CTN)
     const items=expandItems(r.items);
     Object.entries(items).forEach(([p,v])=>{

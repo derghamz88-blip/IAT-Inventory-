@@ -1041,7 +1041,6 @@ function saveReceiptAsRec(){
   }
   // Save non-empty CTN sizes
   const ctns={};Object.entries(RC.ctns).forEach(([s,v])=>{if(parseFloat(v)>0)ctns[s]=parseFloat(v);});
-  if(RC.directKg&&parseFloat(RC.directKg)>0)r.directKg=RC.directKg; else delete r.directKg;
   // Save CWC verification if available
   const cwcData=CWC_ROWS.filter(row=>parseFloat(row.ctns)>0&&parseFloat(row.gross)>0).map(row=>{
     const res=calcCWCRow(row);
@@ -1055,6 +1054,7 @@ function saveReceiptAsRec(){
     items:compactItems(items),
     ctns:Object.keys(ctns).length?ctns:undefined,
     sizePcs:Object.keys(sizePcs).length?sizePcs:undefined,
+    directKg:(RC.directKg&&parseFloat(RC.directKg)>0)?RC.directKg:undefined,
     cwc:cwcData.length?{
       rows:cwcData,
       totalNet:parseFloat(cwcTotalNet.toFixed(3)),

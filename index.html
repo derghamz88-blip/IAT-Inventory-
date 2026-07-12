@@ -318,6 +318,7 @@ const TABS=[
   {key:'returns',      emoji:'🔄',ar:'Returns',      color:'#C62828',light:'#FFEBEE',border:'#EF9A9A'},
   {key:'sales',        emoji:'📤',ar:'Sales',        color:'#F57F17',light:'#FFFDE7',border:'#FFE082'},
   {key:'daysales',     emoji:'☀️',ar:'Day Sales',    color:'#AD1457',light:'#FCE4EC',border:'#F48FB1'},
+  {key:'salesavg',     emoji:'📈',ar:'Sales Avg',    color:'#E65100',light:'#FFF3E0',border:'#FFCC80'},
   {key:'stocksummary', emoji:'📊',ar:'Sys.Stock',    color:'#6A1B9A',light:'#F3E5F5',border:'#CE93D8'},
   {key:'waste',        emoji:'♻️',ar:'Waste',        color:'#37474F',light:'#ECEFF1',border:'#B0BEC5'},
   {key:'production',   emoji:'🏭',ar:'Production',   color:'#D84315',light:'#FBE9E7',border:'#FFAB91'},
@@ -329,7 +330,7 @@ const TABS=[
   {key:'diff',         emoji:'⚖️',ar:'Difference',   color:'#BF360C',light:'#FBE9E7',border:'#FFAB91'},
   {key:'settings',     emoji:'⚙️',ar:'Settings',     color:'#455A64',light:'#ECEFF1',border:'#B0BEC5'},
 ];
-const TABS_R1=['inventory','receivables','returns','sales','daysales','stocksummary','waste','production','frozen','orders'];
+const TABS_R1=['inventory','receivables','returns','sales','daysales','salesavg','stocksummary','waste','production','frozen','orders'];
 const TABS_R2=['records','formulaA','formulaB','diff','settings'];
 
 const TYPE_INFO={
@@ -374,7 +375,7 @@ let S={tab:'inventory',view:'list',record:null,search:'',expanded:new Set(),
        stab:'products',mapSearch:'',smSearch:'',mapEdit:null,smEdit:null,
        recFilter:'all',faFilter:'all',fbFilter:'all',faFrom:'',faTo:'',fbFrom:'',fbTo:'',
        listFrom:'',listTo:'',gFrom:'',gTo:'',
-       faShowDetail:false,fbShowDetail:false,
+       faShowDetail:false,fbShowDetail:false,diffShowDetail:false,
        _prodNWC:{}}; // per-product NWC batches
 let D={inventories:[],receivables:[],returns:[],sales:[],daySales:[],stockSummaries:[],waste:[],production:[],frozen:[],orders:[]};
 let FA=[],FB=[];
@@ -571,6 +572,7 @@ function render(){
   else if(tab==='frozen')       h+=view==='form'?renderFrozenForm():renderFrozenTab();
   else if(tab==='orders')       h+=renderOrdersTab();
   else if(tab==='sales')        h+=view==='form'?renderForm():renderSalesTab();  else if(tab==='daysales')     h+=view==='form'?renderForm():renderDaySalesTab();
+  else if(tab==='salesavg')     h+=renderSalesAvg();
   else if(tab==='stocksummary') h+=view==='form'?renderForm():renderStockTab();
   else if(tab==='production')   h+=view==='form'?renderProductionForm():renderProductionList();
   else if(tab==='records')      h+=renderRecords();
@@ -2206,6 +2208,9 @@ function renderDiff(){
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
       <div style="font-size:13px;font-weight:700;color:#BF360C">⚖️ Difference: B − A</div>
       <div style="display:flex;gap:5px;flex-wrap:wrap">
+        <button class="btn" style="background:#E8EAF6;color:#BF360C;font-size:11px" onclick="S.diffShowDetail=!S.diffShowDetail;render()">
+          ${S.diffShowDetail?'📊 Hide Detail':'📊 Show Detail'}
+        </button>
         <button class="btn" style="background:#1B5E20;color:#fff;padding:4px 10px;font-size:11px" onclick="exportFormulaXLSX('diff')">📊 Excel</button>
         <button class="btn" style="background:#1565C0;color:#fff;padding:4px 10px;font-size:11px" onclick="exportFormulaImage('diff')">🖼️ Image</button>
         <button class="btn" style="background:#C62828;color:#fff;padding:4px 10px;font-size:11px" onclick="exportFormulaPDF('diff')">📄 PDF</button>
@@ -2287,6 +2292,18 @@ function renderDiff(){
     <td style="text-align:center;padding:5px;background:#BF360C">${dTotal>=0?'+':''}${dTotal.toFixed(2)}</td>
     <td style="text-align:center;padding:5px;background:#BF360C99">${dTotal>=0?'+':''}${dTotal.toFixed(2)}</td>
   </tr></tbody></table></div></div>`;
+
+  // Show Detail section
+  if(S.diffShowDetail){
+    h+=`<div class="card" style="border:1.5px solid #FFAB91;margin-top:8px">
+      <div style="font-size:13px;font-weight:700;color:#BF360C;margin-bottom:10px">📊 Detailed Breakdown</div>
+      <div style="font-size:11px;font-weight:700;color:#4527A0;margin-bottom:6px">🧮 Formula A</div>
+      ${renderFormulaDetail('a')}
+      <div style="font-size:11px;font-weight:700;color:#00695C;margin:12px 0 6px">🧮 Formula B</div>
+      ${renderFormulaDetail('b')}
+    </div>`;
+  }
+
   return h;
 }
 
@@ -2554,6 +2571,86 @@ function saveStockRec(){
 }
 
 // ─── Sales Tab ────────────────────────────────────
+function renderSalesAvg(){
+  // Get filter period
+  const period=S.salesAvgPeriod||'week';
+  const now=new Date();
+  const todayStr=now.toISOString().split('T')[0];
+
+  // Get all sales records sorted by date desc
+  const allSales=[...D.sales].sort((a,b)=>b.date.localeCompare(a.date));
+  const daySalesAll=[...(D.daySales||[])].sort((a,b)=>b.date.localeCompare(a.date));
+
+  // Today's sales (from Day Sales or Sales)
+  const todaySalesRec=daySalesAll.find(r=>r.date===todayStr)||allSales.find(r=>r.date===todayStr);
+  const todayItems=todaySalesRec?.converted||{};
+
+  // Filter records by period (excluding today)
+  const days=period==='3days'?3:period==='week'?7:period==='month'?30:90;
+  const cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-days);
+  const cutoffStr=cutoff.toISOString().split('T')[0];
+
+  const periodSales=[...allSales,...daySalesAll].filter(r=>r.date>cutoffStr&&r.date<todayStr);
+
+  // Aggregate by product
+  const totals={};const dayCounts={};
+  periodSales.forEach(r=>{
+    const d=r.date;
+    Object.entries(r.converted||{}).forEach(([prod,qty])=>{
+      if(qty>0){
+        totals[prod]=(totals[prod]||0)+qty;
+        if(!dayCounts[prod])dayCounts[prod]=new Set();
+        dayCounts[prod].add(d);
+      }
+    });
+  });
+
+  // Build rows: products that have any data
+  const allProds=new Set([...Object.keys(totals),...Object.keys(todayItems)]);
+  const rows=[...allProds].map(p=>({
+    prod:p,
+    todayQty:todayItems[p]||0,
+    avgQty:dayCounts[p]?totals[p]/dayCounts[p].size:0,
+    daysCount:dayCounts[p]?dayCounts[p].size:0,
+  })).filter(r=>r.todayQty>0||r.avgQty>0)
+    .sort((a,b)=>b.todayQty-a.todayQty);
+
+  if(!rows.length)return`<div class="card"><div style="color:#78909C;text-align:center;padding:20px">No sales data available</div></div>`;
+
+  const periods=[['3days','3 Days'],['week','Week'],['month','Month'],['3months','3 Months']];
+
+  let h=`<div class="card">
+    <div style="font-size:14px;font-weight:700;color:#E65100;margin-bottom:10px">📈 Sales Average</div>
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+      ${periods.map(([k,l])=>`<button class="btn" style="font-size:11px;${S.salesAvgPeriod===k||(!S.salesAvgPeriod&&k==='week')?'background:#E65100;color:#fff':'background:#FFF3E0;color:#E65100'}" onclick="S.salesAvgPeriod='${k}';render()">${l}</button>`).join('')}
+    </div>
+    <div style="font-size:10px;color:#78909C;margin-bottom:8px">Comparing today vs avg of last ${days} days (${periodSales.length} records)</div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">
+      <thead><tr style="background:#263238;color:#fff">
+        <th style="padding:6px 8px;text-align:left">Product</th>
+        <th style="padding:6px 4px;text-align:center">Today</th>
+        <th style="padding:6px 4px;text-align:center">Avg/${days}d</th>
+        <th style="padding:6px 4px;text-align:center">Diff</th>
+      </tr></thead><tbody>`;
+
+  rows.forEach((r,i)=>{
+    const diff=r.todayQty-r.avgQty;
+    const pct=r.avgQty>0?((diff/r.avgQty)*100).toFixed(0):null;
+    const diffCol=diff>0?'#2E7D32':diff<0?'#C62828':'#78909C';
+    const bg=i%2===0?'#FAFAFA':'#fff';
+    h+=`<tr style="background:${bg}">
+      <td style="padding:5px 8px;font-weight:600">${r.prod}</td>
+      <td style="padding:5px 4px;text-align:center;font-weight:700;color:#1565C0">${r.todayQty>0?r.todayQty.toFixed(1):'—'}</td>
+      <td style="padding:5px 4px;text-align:center;color:#546E7A">${r.avgQty>0?r.avgQty.toFixed(1):'—'}</td>
+      <td style="padding:5px 4px;text-align:center;font-weight:700;color:${diffCol}">
+        ${diff!==0?(diff>0?'+':'')+diff.toFixed(1)+(pct?' ('+pct+'%)':''):'—'}
+      </td>
+    </tr>`;
+  });
+
+  h+=`</tbody></table></div></div>`;
+  return h;
+}
 function renderSalesTab(){return UP.step==='upload'?renderUpload():renderSalesResult();}
 function renderUpload(){
   const inf=ti('sales');const recs=[...D.sales].sort((a,b)=>b.date.localeCompare(a.date));
@@ -4836,7 +4933,7 @@ async function odSaveExec(token){
   try{
     const body=getBackupData();
     // Save main backup file
-    const resp=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/IAT-Inventory/IAT-Inventory-Backup.json:/content',{
+    const resp=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/IAT-TRADING-INVENTORY/IAT-TRADING-INVENTORY-Backup.json:/content',{
       method:'PUT',
       headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
       body
@@ -4846,8 +4943,8 @@ async function odSaveExec(token){
 
     // Also save dated backup copy
     const today=new Date().toISOString().split('T')[0];
-    const datedName=`IAT-Inventory-Backup-${today}.json`;
-    await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/IAT-Inventory/${datedName}:/content`,{
+    const datedName=`IAT-TRADING-INVENTORY-Backup-${today}.json`;
+    await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/IAT-TRADING-INVENTORY/${datedName}:/content`,{
       method:'PUT',
       headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
       body
@@ -4859,12 +4956,12 @@ async function odSaveExec(token){
 async function odLoadExec(token){
   showToast('📂 Loading from OneDrive...');
   try{
-    const lr=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/IAT-Inventory:/children',{headers:{'Authorization':'Bearer '+token}});
+    const lr=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/IAT-TRADING-INVENTORY:/children',{headers:{'Authorization':'Bearer '+token}});
     if(lr.status===401){localStorage.removeItem('od-at');odLogin('load');return;}
     if(!lr.ok){alert('No backup folder found. Save first!');return;}
     const list=await lr.json();
     const files=(list.value||[]).filter(f=>f.name.endsWith('.json')).sort((a,b)=>new Date(b.lastModifiedDateTime)-new Date(a.lastModifiedDateTime));
-    if(!files.length){alert('No backup files in OneDrive/IAT-Inventory/');return;}
+    if(!files.length){alert('No backup files in OneDrive/IAT-TRADING-INVENTORY/');return;}
     const fr=await fetch('https://graph.microsoft.com/v1.0/me/drive/items/'+files[0].id+'/content',{headers:{'Authorization':'Bearer '+token}});
     const data=await fr.json();
     if(!data.version||!data.D){alert('Invalid file');return;}
@@ -4939,7 +5036,7 @@ async function odSave(forceNew=false){
   const data={version:3,exportDate:new Date().toISOString(),PRODUCTS,MD,SMD,SH_DATA,D,FA,FB};
   const json=JSON.stringify(data,null,2);
   const blob=new Blob([json],{type:'application/json'});
-  const fname='IAT-Inventory-Backup.json';
+  const fname='IAT-TRADING-INVENTORY-Backup.json';
   const file=new File([blob],fname,{type:'application/json'});
 
   // ── Mobile: use native share sheet (includes OneDrive app) ──

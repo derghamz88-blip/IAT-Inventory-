@@ -2579,8 +2579,16 @@ function getSalesQty(r){
   const items=r.converted||r.items||{};
   Object.entries(items).forEach(([prod,val])=>{
     let qty=0;
-    if(typeof val==='number')qty=val;
-    else if(val&&typeof val==='object'){qty=parseFloat(val.kg)||0;if(C_MAP&&C_MAP[prod])qty=parseFloat(val.pcs)||0;}
+    if(typeof val==='number'){
+      qty=val;
+    } else if(val&&typeof val==='object'){
+      if(C_MAP&&C_MAP[prod]){
+        // 500g product: use pcs, convert to KG equivalent
+        qty=(parseFloat(val.pcs)||0)*0.5;
+      } else {
+        qty=parseFloat(val.kg)||0;
+      }
+    }
     if(qty>0)out[prod]=qty;
   });
   return out;

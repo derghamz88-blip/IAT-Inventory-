@@ -2574,6 +2574,17 @@ function saveStockRec(){
 }
 
 // ─── Sales Tab ────────────────────────────────────
+function getSalesQty(r){
+  const out={};
+  const items=r.converted||r.items||{};
+  Object.entries(items).forEach(([prod,val])=>{
+    let qty=0;
+    if(typeof val==='number')qty=val;
+    else if(val&&typeof val==='object'){qty=parseFloat(val.kg)||0;if(C_MAP&&C_MAP[prod])qty=parseFloat(val.pcs)||0;}
+    if(qty>0)out[prod]=qty;
+  });
+  return out;
+}
 function addAvgToFormula(fid){
   const period=S.salesAvgPeriod||'week';
   const now=new Date();
@@ -2584,23 +2595,11 @@ function addAvgToFormula(fid){
 
   const allSales=[...D.sales,...(D.daySales||[])].filter(r=>r.date>cutoffStr&&r.date<=todayStr);
 
-  function getSalesQtyLocal(r){
-    const out={};
-    const items=r.converted||r.items||{};
-    Object.entries(items).forEach(([prod,val])=>{
-      let qty=0;
-      if(typeof val==='number')qty=val;
-      else if(val&&typeof val==='object'){qty=parseFloat(val.kg)||0;if(C_MAP&&C_MAP[prod])qty=parseFloat(val.pcs)||0;}
-      if(qty>0)out[prod]=qty;
-    });
-    return out;
-  }
-
   // Merge by date
   const byDate={};
   allSales.forEach(r=>{
     if(!byDate[r.date])byDate[r.date]={};
-    Object.entries(getSalesQtyLocal(r)).forEach(([prod,qty])=>{
+    Object.entries(getSalesQty(r)).forEach(([prod,qty])=>{
       byDate[r.date][prod]=(byDate[r.date][prod]||0)+qty;
     });
   });
@@ -2650,19 +2649,6 @@ function renderSalesAvg(){
   // Get all sales records sorted by date desc
   const allSales=[...D.sales].sort((a,b)=>b.date.localeCompare(a.date));
   const daySalesAll=[...(D.daySales||[])].sort((a,b)=>b.date.localeCompare(a.date));
-
-  // Helper: extract KG quantities from a sales record (items format)
-  function getSalesQty(r){
-    const out={};
-    const items=r.converted||r.items||{};
-    Object.entries(items).forEach(([prod,val])=>{
-      let qty=0;
-      if(typeof val==='number')qty=val;
-      else if(val&&typeof val==='object'){qty=parseFloat(val.kg)||0;if(C_MAP&&C_MAP[prod])qty=parseFloat(val.pcs)||0;}
-      if(qty>0)out[prod]=qty;
-    });
-    return out;
-  }
 
   // Today's sales (from Day Sales or Sales)
   const todaySalesRec=daySalesAll.find(r=>r.date===todayStr)||allSales.find(r=>r.date===todayStr);

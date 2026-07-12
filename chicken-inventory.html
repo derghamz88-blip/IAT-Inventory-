@@ -2693,12 +2693,12 @@ function renderSalesAvg(){
     });
   });
 
-  // Build rows: products that have any data
+  // Build rows: divide by total days in period (not just days with sales)
   const allProds=new Set([...Object.keys(totals),...Object.keys(todayItems)]);
   const rows=[...allProds].map(p=>({
     prod:p,
     todayQty:todayItems[p]||0,
-    avgQty:dayCounts[p]?totals[p]/dayCounts[p].size:0,
+    avgQty:totals[p]?totals[p]/days:0,
     daysCount:dayCounts[p]?dayCounts[p].size:0,
   })).filter(r=>r.todayQty>0||r.avgQty>0)
     .sort((a,b)=>b.todayQty-a.todayQty);

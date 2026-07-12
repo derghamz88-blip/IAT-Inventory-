@@ -2650,8 +2650,10 @@ function renderSalesAvg(){
   const allSales=[...D.sales].sort((a,b)=>b.date.localeCompare(a.date));
   const daySalesAll=[...(D.daySales||[])].sort((a,b)=>b.date.localeCompare(a.date));
 
-  // Today's sales (from Day Sales or Sales)
-  const todaySalesRec=daySalesAll.find(r=>r.date===todayStr)||allSales.find(r=>r.date===todayStr);
+  // Today's sales: merge Sales + Day Sales for same date
+  const todayRecs=[...allSales,...daySalesAll].filter(r=>r.date===todayStr);
+  const todayMerged={};
+  todayRecs.forEach(r=>{Object.entries(getSalesQty(r)).forEach(([p,q])=>{todayMerged[p]=(todayMerged[p]||0)+q;});});
   const todayItems=todayMerged;
 
   // Filter records by period (excluding today)

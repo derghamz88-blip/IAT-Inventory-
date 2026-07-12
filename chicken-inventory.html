@@ -429,6 +429,9 @@ function getTotalKg(items,p){
 const REC_TYPE_MAP={inventories:'inventory',receivables:'receivables',returns:'returns',sales:'sales',daySales:'daysales',stockSummaries:'stocksummary',waste:'waste',production:'production',frozen:'frozen',orders:'orders'};
 
 function findRecord(id){
+  // Check virtual avg records first
+  if(id&&id.startsWith('avg-')&&D._avgRecs&&D._avgRecs[id])
+    return{record:D._avgRecs[id],type:'salesavg',key:'_avgRecs'};
   for(const[key,type] of Object.entries(REC_TYPE_MAP)){
     const arr=key==="orders"?D.orders:(D[key]||[]);
     const r=arr.find(r=>r.id===id);
@@ -2571,6 +2574,73 @@ function saveStockRec(){
 }
 
 // ─── Sales Tab ────────────────────────────────────
+function addAvgToFormula(fid){
+  const period=S.salesAvgPeriod||'week';
+  const now=new Date();
+  const todayStr=now.toISOString().split('T')[0];
+  const days=period==='3days'?3:period==='week'?7:period==='month'?30:90;
+  const cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-days);
+  const cutoffStr=cutoff.toISOString().split('T')[0];
+
+  const allSales=[...D.sales,...(D.daySales||[])].filter(r=>r.date>cutoffStr&&r.date<=todayStr);
+
+  function getSalesQtyLocal(r){
+    const out={};
+    const items=r.converted||r.items||{};
+    Object.entries(items).forEach(([prod,val])=>{
+      let qty=0;
+      if(typeof val==='number')qty=val;
+      else if(val&&typeof val==='object'){qty=parseFloat(val.kg)||0;if(C_MAP&&C_MAP[prod])qty=parseFloat(val.pcs)||0;}
+      if(qty>0)out[prod]=qty;
+    });
+    return out;
+  }
+
+  // Merge by date
+  const byDate={};
+  allSales.forEach(r=>{
+    if(!byDate[r.date])byDate[r.date]={};
+    Object.entries(getSalesQtyLocal(r)).forEach(([prod,qty])=>{
+      byDate[r.date][prod]=(byDate[r.date][prod]||0)+qty;
+    });
+  });
+
+  const totals={};const dayCounts={};
+  Object.entries(byDate).forEach(([date,prods])=>{
+    Object.entries(prods).forEach(([prod,qty])=>{
+      if(qty>0){
+        totals[prod]=(totals[prod]||0)+qty;
+        if(!dayCounts[prod])dayCounts[prod]=new Set();
+        dayCounts[prod].add(date);
+      }
+    });
+  });
+
+  // Build items from averages
+  const items={};
+  PRODUCTS.forEach(p=>{
+    const avg=dayCounts[p]?totals[p]/dayCounts[p].size:0;
+    if(avg>0){
+      if(C_MAP&&C_MAP[p])items[p]={kg:'',pcs:avg.toFixed(1)};
+      else items[p]={kg:avg.toFixed(3),pcs:''};
+    }
+  });
+
+  // Create virtual record
+  const virtId='avg-'+period+'-'+todayStr;
+  const virtRec={id:virtId,date:todayStr,notes:'Sales Avg ('+period+')',items};
+
+  // Remove old avg records from formula
+  if(fid==='a')FA=FA.filter(o=>!o.id.startsWith('avg-'));
+  else FB=FB.filter(o=>!o.id.startsWith('avg-'));
+
+  // Store virtual record in D (temporary)
+  if(!D._avgRecs)D._avgRecs={};
+  D._avgRecs[virtId]=virtRec;
+
+  addToFormula(fid,virtId,'+');
+  showToast('✅ Added Sales Avg to Formula '+fid.toUpperCase());
+}
 function renderSalesAvg(){
   // Get filter period
   const period=S.salesAvgPeriod||'week';
@@ -2596,24 +2666,33 @@ function renderSalesAvg(){
 
   // Today's sales (from Day Sales or Sales)
   const todaySalesRec=daySalesAll.find(r=>r.date===todayStr)||allSales.find(r=>r.date===todayStr);
-  const todayItems=todaySalesRec?getSalesQty(todaySalesRec):{};
+  const todayItems=todayMerged;
 
   // Filter records by period (excluding today)
   const days=period==='3days'?3:period==='week'?7:period==='month'?30:90;
   const cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-days);
   const cutoffStr=cutoff.toISOString().split('T')[0];
 
-  const periodSales=[...allSales,...daySalesAll].filter(r=>r.date>cutoffStr&&r.date<todayStr);
+  // Merge Sales + Day Sales for period, sum by date+product
+  const periodSales=[...allSales,...daySalesAll].filter(r=>r.date>cutoffStr&&r.date<=todayStr);
 
-  // Aggregate by product
-  const totals={};const dayCounts={};
+  // Merge Sales + Day Sales by date (same date = one day)
+  const byDate={};
   periodSales.forEach(r=>{
-    const d=r.date;
+    if(!byDate[r.date])byDate[r.date]={};
     Object.entries(getSalesQty(r)).forEach(([prod,qty])=>{
+      byDate[r.date][prod]=(byDate[r.date][prod]||0)+qty;
+    });
+  });
+
+  // Aggregate by product across all days
+  const totals={};const dayCounts={};
+  Object.entries(byDate).forEach(([date,prods])=>{
+    Object.entries(prods).forEach(([prod,qty])=>{
       if(qty>0){
         totals[prod]=(totals[prod]||0)+qty;
         if(!dayCounts[prod])dayCounts[prod]=new Set();
-        dayCounts[prod].add(d);
+        dayCounts[prod].add(date);
       }
     });
   });
@@ -2633,7 +2712,13 @@ function renderSalesAvg(){
   const periods=[['3days','3 Days'],['week','Week'],['month','Month'],['3months','3 Months']];
 
   let h=`<div class="card">
-    <div style="font-size:14px;font-weight:700;color:#E65100;margin-bottom:10px">📈 Sales Average</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px">
+      <div style="font-size:14px;font-weight:700;color:#E65100">📈 Sales Average</div>
+      <div style="display:flex;gap:5px">
+        <button class="btn" style="background:#4527A0;color:#fff;font-size:11px" onclick="addAvgToFormula('a')">+ Formula A</button>
+        <button class="btn" style="background:#00695C;color:#fff;font-size:11px" onclick="addAvgToFormula('b')">+ Formula B</button>
+      </div>
+    </div>
     <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
       ${periods.map(([k,l])=>`<button class="btn" style="font-size:11px;${S.salesAvgPeriod===k||(!S.salesAvgPeriod&&k==='week')?'background:#E65100;color:#fff':'background:#FFF3E0;color:#E65100'}" onclick="S.salesAvgPeriod='${k}';render()">${l}</button>`).join('')}
     </div>

@@ -2658,11 +2658,12 @@ function renderSalesAvg(){
   const allSales=[...D.sales].sort((a,b)=>b.date.localeCompare(a.date));
   const daySalesAll=[...(D.daySales||[])].sort((a,b)=>b.date.localeCompare(a.date));
 
-  // Today's sales: merge Sales + Day Sales for same date
-  const todayRecs=[...allSales,...daySalesAll].filter(r=>r.date===todayStr);
-  const todayMerged={};
-  todayRecs.forEach(r=>{Object.entries(getSalesQty(r)).forEach(([p,q])=>{todayMerged[p]=(todayMerged[p]||0)+q;});});
-  const todayItems=todayMerged;
+  // Compare date: use selected date (default today), merge Sales+DaySales
+  const compareStr=S.salesAvgCompare||todayStr;
+  const compareRecs=[...allSales,...daySalesAll].filter(r=>r.date===compareStr);
+  const compareMerged={};
+  compareRecs.forEach(r=>{Object.entries(getSalesQty(r)).forEach(([p,q])=>{compareMerged[p]=(compareMerged[p]||0)+q;});});
+  const todayItems=compareMerged;
 
   // Filter records by period
   let days,cutoffStr,endStr=todayStr;
@@ -2735,40 +2736,63 @@ function renderSalesAvg(){
       <div style="font-size:10px;color:#78909C">To:</div>
       <input type="date" class="fi" value="${S.salesAvgTo||todayStr}" style="font-size:12px;padding:4px 8px" onchange="S.salesAvgTo=this.value;render()">
     </div>`:''}
-    <div style="font-size:10px;color:#78909C;margin-bottom:8px">Avg of last ${days} days (${periodSales.length} records)</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+      <div style="font-size:10px;color:#78909C">Compare date:</div>
+      <input type="date" class="fi" value="${S.salesAvgCompare||todayStr}" style="font-size:12px;padding:4px 8px" onchange="S.salesAvgCompare=this.value;render()">
+      <div style="font-size:10px;color:#78909C">Avg: ${days} days (${periodSales.length} records)</div>
+    </div>
     <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">
       <thead><tr style="background:#263238;color:#fff">
         <th style="padding:6px 8px;text-align:left">Product</th>
-        <th style="padding:6px 4px;text-align:center">Today</th>
-        <th style="padding:6px 4px;text-align:center">Avg/${days}d</th>
-        <th style="padding:6px 4px;text-align:center">Diff</th>
+        <th style="padding:6px 4px;text-align:center">Details</th>
+        <th style="padding:6px 4px;text-align:center;background:#1565C0">Comb KG</th>
+        <th style="padding:6px 4px;text-align:center;background:#2E7D32">Avg/${days}d</th>
+        <th style="padding:6px 4px;text-align:center;background:#BF360C">Diff</th>
       </tr></thead><tbody>`;
 
-  // Merge 500g products into their parent (combined KG)
-  const mergedToday={};const mergedAvg={};
-  rows.forEach(r=>{
-    const parent=C_MAP&&C_MAP[r.prod]?C_MAP[r.prod]:r.prod;
-    const kgToday=C_MAP&&C_MAP[r.prod]?r.todayQty*0.5:r.todayQty;
-    const kgAvg=C_MAP&&C_MAP[r.prod]?r.avgQty*0.5:r.avgQty;
-    mergedToday[parent]=(mergedToday[parent]||0)+kgToday;
-    mergedAvg[parent]=(mergedAvg[parent]||0)+kgAvg;
+  // Build details per parent product
+  const parentDetails={};// parent -> {todayKg, avgKg, details:[{prod, todayQty, todayKg, avgKg}]}
+  PARENT_PRODUCTS.forEach(p=>{
+    parentDetails[p]={todayKg:0,avgKg:0,details:[]};
+    // Parent itself
+    const parentRow=rows.find(r=>r.prod===p);
+    if(parentRow){
+      parentDetails[p].todayKg+=parentRow.todayQty;
+      parentDetails[p].avgKg+=parentRow.avgQty;
+      if(parentRow.todayQty>0||parentRow.avgQty>0)
+        parentDetails[p].details.push({prod:p,todayQty:parentRow.todayQty,todayKg:parentRow.todayQty,avgKg:parentRow.avgQty,is500:false});
+    }
+    // Children (500g)
+    rows.filter(r=>C_MAP&&C_MAP[r.prod]===p).forEach(child=>{
+      const kgT=child.todayQty*0.5;
+      const kgA=child.avgQty*0.5;
+      parentDetails[p].todayKg+=kgT;
+      parentDetails[p].avgKg+=kgA;
+      if(child.todayQty>0||child.avgQty>0)
+        parentDetails[p].details.push({prod:child.prod,todayQty:child.todayQty,todayKg:kgT,avgKg:kgA,is500:true});
+    });
   });
 
-  // Show only parent products, sorted by today qty desc
+  // Sort by today combined KG desc
   const mergedRows=PARENT_PRODUCTS
-    .filter(p=>mergedToday[p]>0||mergedAvg[p]>0)
-    .map(p=>({prod:p,todayKg:mergedToday[p]||0,avgKg:mergedAvg[p]||0}))
-    .sort((a,b)=>b.todayKg-a.todayKg);
+    .filter(p=>parentDetails[p].todayKg>0||parentDetails[p].avgKg>0)
+    .sort((a,b)=>parentDetails[b].todayKg-parentDetails[a].todayKg);
 
-  mergedRows.forEach((r,i)=>{
-    const diff=r.todayKg-r.avgKg;
-    const pct=r.avgKg>0?((diff/r.avgKg)*100).toFixed(0):null;
+  mergedRows.forEach((p,i)=>{
+    const d=parentDetails[p];
+    const diff=d.todayKg-d.avgKg;
+    const pct=d.avgKg>0?((diff/d.avgKg)*100).toFixed(0):null;
     const diffCol=diff>0?'#2E7D32':diff<0?'#C62828':'#78909C';
     const bg=i%2===0?'#FAFAFA':'#fff';
+    // Build details cell
+    const detailHtml=d.details.map(dt=>
+      `<div style="font-size:9px;color:#78909C">${dt.prod}: ${dt.is500?dt.todayQty.toFixed(0)+'pcs='+dt.todayKg.toFixed(1)+'kg':dt.todayKg.toFixed(1)+'kg'}</div>`
+    ).join('');
     h+=`<tr style="background:${bg}">
-      <td style="padding:5px 8px;font-weight:600;font-size:11px">${r.prod}</td>
-      <td style="padding:5px 4px;text-align:center;font-weight:700;color:#1565C0;font-size:12px">${r.todayKg>0?r.todayKg.toFixed(2):'—'}</td>
-      <td style="padding:5px 4px;text-align:center;color:#546E7A;font-size:12px">${r.avgKg>0?r.avgKg.toFixed(2):'—'}</td>
+      <td style="padding:5px 8px;font-weight:700;font-size:11px">${p}</td>
+      <td style="padding:5px 4px;font-size:9px;color:#546E7A">${detailHtml||'—'}</td>
+      <td style="padding:5px 4px;text-align:center;font-weight:700;color:#1565C0;font-size:12px">${d.todayKg>0?d.todayKg.toFixed(2):'—'}</td>
+      <td style="padding:5px 4px;text-align:center;color:#546E7A;font-size:12px">${d.avgKg>0?d.avgKg.toFixed(2):'—'}</td>
       <td style="padding:5px 4px;text-align:center;font-weight:700;color:${diffCol};font-size:12px">
         ${diff!==0?(diff>0?'+':'')+diff.toFixed(2)+(pct?' <span style="font-size:9px">('+pct+'%)</span>':''):'—'}
       </td>

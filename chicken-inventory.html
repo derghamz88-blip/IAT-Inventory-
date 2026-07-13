@@ -2744,30 +2744,33 @@ function renderSalesAvg(){
         <th style="padding:6px 4px;text-align:center">Diff</th>
       </tr></thead><tbody>`;
 
-  // Helper: get combined KG (for 500g products: pcs×0.5)
-  function getComb(prod,qty){
-    if(C_MAP&&C_MAP[prod])return qty*0.5; // already in pcs, convert to KG
-    return qty;
-  }
+  // Merge 500g products into their parent (combined KG)
+  const mergedToday={};const mergedAvg={};
+  rows.forEach(r=>{
+    const parent=C_MAP&&C_MAP[r.prod]?C_MAP[r.prod]:r.prod;
+    const kgToday=C_MAP&&C_MAP[r.prod]?r.todayQty*0.5:r.todayQty;
+    const kgAvg=C_MAP&&C_MAP[r.prod]?r.avgQty*0.5:r.avgQty;
+    mergedToday[parent]=(mergedToday[parent]||0)+kgToday;
+    mergedAvg[parent]=(mergedAvg[parent]||0)+kgAvg;
+  });
 
-  rows.forEach((r,i)=>{
-    const todayComb=getComb(r.prod,r.todayQty);
-    const avgComb=getComb(r.prod,r.avgQty);
-    const diff=todayComb-avgComb;
-    const pct=avgComb>0?((diff/avgComb)*100).toFixed(0):null;
+  // Show only parent products, sorted by today qty desc
+  const mergedRows=PARENT_PRODUCTS
+    .filter(p=>mergedToday[p]>0||mergedAvg[p]>0)
+    .map(p=>({prod:p,todayKg:mergedToday[p]||0,avgKg:mergedAvg[p]||0}))
+    .sort((a,b)=>b.todayKg-a.todayKg);
+
+  mergedRows.forEach((r,i)=>{
+    const diff=r.todayKg-r.avgKg;
+    const pct=r.avgKg>0?((diff/r.avgKg)*100).toFixed(0):null;
     const diffCol=diff>0?'#2E7D32':diff<0?'#C62828':'#78909C';
     const bg=i%2===0?'#FAFAFA':'#fff';
-    const is500=C_MAP&&C_MAP[r.prod];
     h+=`<tr style="background:${bg}">
-      <td style="padding:5px 8px;font-weight:600;font-size:11px">${r.prod}${is500?'<div style="font-size:9px;color:#AB47BC">pcs</div>':''}</td>
-      <td style="padding:5px 4px;text-align:center;font-weight:700;color:#1565C0;font-size:12px">
-        ${r.todayQty>0?(is500?r.todayQty.toFixed(0)+' <span style="font-size:9px;color:#78909C">('+todayComb.toFixed(1)+'kg)</span>':todayComb.toFixed(1)):'—'}
-      </td>
-      <td style="padding:5px 4px;text-align:center;color:#546E7A;font-size:12px">
-        ${r.avgQty>0?(is500?r.avgQty.toFixed(1)+' <span style="font-size:9px;color:#78909C">('+avgComb.toFixed(1)+'kg)</span>':avgComb.toFixed(1)):'—'}
-      </td>
+      <td style="padding:5px 8px;font-weight:600;font-size:11px">${r.prod}</td>
+      <td style="padding:5px 4px;text-align:center;font-weight:700;color:#1565C0;font-size:12px">${r.todayKg>0?r.todayKg.toFixed(2):'—'}</td>
+      <td style="padding:5px 4px;text-align:center;color:#546E7A;font-size:12px">${r.avgKg>0?r.avgKg.toFixed(2):'—'}</td>
       <td style="padding:5px 4px;text-align:center;font-weight:700;color:${diffCol};font-size:12px">
-        ${diff!==0?(diff>0?'+':'')+diff.toFixed(1)+(pct?' <span style="font-size:9px">('+pct+'%)</span>':''):'—'}
+        ${diff!==0?(diff>0?'+':'')+diff.toFixed(2)+(pct?' <span style="font-size:9px">('+pct+'%)</span>':''):'—'}
       </td>
     </tr>`;
   });

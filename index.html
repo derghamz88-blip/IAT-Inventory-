@@ -567,6 +567,8 @@ function render(){
   if(nr1)_navScrollX1=nr1.scrollLeft;
   if(nr2)_navScrollX2=nr2.scrollLeft;
   const{tab,view}=S;
+  // Guard: unknown tab falls back to inventory (prevents blank screen)
+  if(!TABS.find(t=>t.key===S.tab)){S.tab='inventory';}
   let h=renderHdr()+renderNav()+'<div class="main">';
   const entryTabs=['inventory','receivables','returns','waste'];
   if(entryTabs.includes(tab)){

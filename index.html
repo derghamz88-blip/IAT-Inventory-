@@ -5636,6 +5636,10 @@ var CT_DEFAULT_TREE=[
 var CT_TREE=(function(){try{var s=localStorage.getItem('ct_tree');return s?JSON.parse(s):JSON.parse(JSON.stringify(CT_DEFAULT_TREE));}catch(e){return JSON.parse(JSON.stringify(CT_DEFAULT_TREE));}})();
 var CT_DEMAND=(function(){try{var s=localStorage.getItem('ct_demand');return s?JSON.parse(s):{};}catch(e){return {};}})();
 var CT_SUB='tree';
+var CT_PERIOD=7;
+var CT_RESULT=null;
+var CT_MANUAL_RAW='';
+var CT_MANUAL_FULL=true;
 
 function ctSaveTree(){try{localStorage.setItem('ct_tree',JSON.stringify(CT_TREE));}catch(e){}}
 function ctSaveDemand(){try{localStorage.setItem('ct_demand',JSON.stringify(CT_DEMAND));}catch(e){}}
@@ -5652,8 +5656,337 @@ function ctFindNode(id,nodes,parent){
   return null;
 }
 
+// ---- Cutting: sub-navigation ----
+function ctSub(k){CT_SUB=k;render();}
+
 function renderCuttingTab(){
-  return '<div class="card">'+ctRenderTree()+'</div>';
+  var tabs=[['tree','Tree'],['plan','Plan'],['manual','Manual']];
+  var nav='';
+  for(var i=0;i<tabs.length;i++){
+    var on=(CT_SUB===tabs[i][0]);
+    nav+='<button onclick="ctSub(\''+tabs[i][0]+'\')" style="flex:1;padding:8px 4px;border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;'
+      +(on?'background:#6A1B9A;color:#fff':'background:#F3E5F5;color:#6A1B9A')+'">'+tabs[i][1]+'</button>';
+  }
+  var body='';
+  if(CT_SUB==='plan')body=ctRenderPlan();
+  else if(CT_SUB==='manual')body=ctRenderManual();
+  else body=ctRenderTree();
+  return '<div class="card">'
+    +'<div style="display:flex;gap:5px;margin-bottom:12px">'+nav+'</div>'
+    +body+'</div>';
+}
+
+// ---- Helper: average daily sales per product name ----
+function ctAvgSalesMap(days){
+  var now=new Date();
+  var todayStr=now.toISOString().split('T')[0];
+  var cut=new Date(now);cut.setDate(cut.getDate()-days);
+  var cutStr=cut.toISOString().split('T')[0];
+  var recs=[].concat(D.sales||[],D.daySales||[]).filter(function(r){return r.date>cutStr&&r.date<=todayStr;});
+  var byDate={};
+  recs.forEach(function(r){
+    if(!byDate[r.date])byDate[r.date]={};
+    var q=getSalesQty(r);
+    for(var p in q){byDate[r.date][p]=(byDate[r.date][p]||0)+q[p];}
+  });
+  var tot={};
+  for(var d in byDate){for(var p in byDate[d]){tot[p]=(tot[p]||0)+byDate[d][p];}}
+  var avg={};
+  for(var p in tot){avg[p]=tot[p]/days;}
+  return avg;
+}
+
+// ---- Match a cutting node to an inventory product name ----
+function ctMatchProduct(nodeName){
+  var norm=function(s){return String(s).toLowerCase().replace(/[\s\-_]/g,'');};
+  var target=norm(nodeName);
+  for(var i=0;i<PRODUCTS.length;i++){
+    if(norm(PRODUCTS[i])===target)return PRODUCTS[i];
+  }
+  for(var j=0;j<PRODUCTS.length;j++){
+    var pn=norm(PRODUCTS[j]);
+    if(pn.indexOf(target)>=0||target.indexOf(pn)>=0)return PRODUCTS[j];
+  }
+  return null;
+}
+
+// ---- Plan page ----
+function ctRenderPlan(){
+  var period=CT_PERIOD||7;
+  var h='<div style="background:#F3E5F5;border-radius:10px;padding:12px;margin-bottom:12px">'
+    +'<div style="font-size:11px;font-weight:700;color:#6A1B9A;margin-bottom:8px">Pull demand from Sales Average</div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">';
+  var opts=[[3,'3 Days'],[7,'Week'],[30,'Month']];
+  for(var i=0;i<opts.length;i++){
+    var on=(period===opts[i][0]);
+    h+='<button onclick="CT_PERIOD='+opts[i][0]+';render()" style="padding:6px 12px;border:none;border-radius:7px;cursor:pointer;font-size:11px;font-weight:700;'
+      +(on?'background:#6A1B9A;color:#fff':'background:#fff;color:#6A1B9A')+'">'+opts[i][1]+'</button>';
+  }
+  h+='</div>'
+    +'<button onclick="ctPullFromSales()" style="width:100%;padding:9px;border:none;border-radius:8px;background:#6A1B9A;color:#fff;font-weight:700;font-size:12px;cursor:pointer">Fill demand from Sales Avg</button>'
+    +'</div>';
+
+  h+='<div style="display:flex;gap:6px;margin-bottom:10px">'
+    +'<button onclick="ctFillStockFromInventory()" style="flex:1;padding:8px;border:none;border-radius:8px;background:#E8F5E9;color:#2E7D32;font-weight:700;font-size:11px;cursor:pointer">Fill stock from Inventory</button>'
+    +'<button onclick="ctClearPlan()" style="padding:8px 14px;border:none;border-radius:8px;background:#FFEBEE;color:#C62828;font-weight:700;font-size:11px;cursor:pointer">Clear</button>'
+    +'</div>';
+
+  var flat=ctFlatten(CT_TREE);
+  h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">'
+    +'<thead><tr style="background:#6A1B9A;color:#fff">'
+    +'<th style="padding:6px 8px;text-align:left">Product</th>'
+    +'<th style="padding:6px 4px;text-align:center;width:78px">Need</th>'
+    +'<th style="padding:6px 4px;text-align:center;width:78px">Stock</th>'
+    +'</tr></thead><tbody>';
+  var shown=0;
+  for(var k=0;k<flat.length;k++){
+    var n=flat[k].node,dep=flat[k].depth;
+    if(n.bone)continue;
+    shown++;
+    var d=CT_DEMAND[n.id]||{};
+    var bg=(shown%2===0)?'#F8F5FA':'#fff';
+    var nid=ctEsc(n.id);
+    h+='<tr style="background:'+bg+'">'
+      +'<td style="padding:5px 8px;padding-left:'+(8+dep*13)+'px;font-weight:600;font-size:'+(11-dep*0.4)+'px">'+(dep>0?'&#8627; ':'')+n.name+'</td>'
+      +'<td style="padding:3px"><input type="text" inputmode="decimal" value="'+(d.need||'')+'" placeholder="0" '
+      +'oninput="ctSetDemand(\''+nid+'\',\'need\',this.value)" '
+      +'style="width:100%;padding:5px;text-align:center;border:1px solid #CE93D8;border-radius:6px;font-size:11px"></td>'
+      +'<td style="padding:3px"><input type="text" inputmode="decimal" value="'+(d.stock||'')+'" placeholder="0" '
+      +'oninput="ctSetDemand(\''+nid+'\',\'stock\',this.value)" '
+      +'style="width:100%;padding:5px;text-align:center;border:1px solid #A5D6A7;border-radius:6px;font-size:11px"></td>'
+      +'</tr>';
+  }
+  h+='</tbody></table></div>';
+  h+='<button onclick="ctCalculate()" style="width:100%;margin-top:12px;padding:13px;border:none;border-radius:10px;background:#6A1B9A;color:#fff;font-weight:800;font-size:14px;cursor:pointer">Calculate Cutting Plan</button>';
+  if(CT_RESULT)h+=ctRenderResult();
+  return h;
+}
+
+function ctFlatten(nodes,pf,dep){
+  pf=(pf===undefined)?1:pf;dep=dep||0;
+  var out=[];
+  for(var i=0;i<nodes.length;i++){
+    var n=nodes[i];
+    var f=pf*(n.pct/100);
+    out.push({node:n,factor:f,depth:dep});
+    if(n.kids&&n.kids.length)out=out.concat(ctFlatten(n.kids,f,dep+1));
+  }
+  return out;
+}
+
+function ctSetDemand(id,field,val){
+  if(!CT_DEMAND[id])CT_DEMAND[id]={need:'',stock:''};
+  CT_DEMAND[id][field]=val;
+  ctSaveDemand();
+}
+
+function ctPullFromSales(){
+  var days=CT_PERIOD||7;
+  var avg=ctAvgSalesMap(days);
+  var flat=ctFlatten(CT_TREE);
+  var n=0;
+  for(var i=0;i<flat.length;i++){
+    var node=flat[i].node;
+    if(node.bone)continue;
+    var prod=ctMatchProduct(node.name);
+    if(prod&&avg[prod]>0){
+      if(!CT_DEMAND[node.id])CT_DEMAND[node.id]={need:'',stock:''};
+      CT_DEMAND[node.id].need=avg[prod].toFixed(1);
+      n++;
+    }
+  }
+  ctSaveDemand();render();
+  showToast(n>0?('Filled '+n+' products from Sales Avg'):'No matching products found');
+}
+
+function ctFillStockFromInventory(){
+  var latest=(D.inventories&&D.inventories.length)?D.inventories[0]:null;
+  if(!latest){showToast('No inventory record found');return;}
+  var items=expandItems(latest.items);
+  var flat=ctFlatten(CT_TREE);
+  var n=0;
+  for(var i=0;i<flat.length;i++){
+    var node=flat[i].node;
+    if(node.bone)continue;
+    var prod=ctMatchProduct(node.name);
+    if(prod&&items[prod]){
+      var kg=parseFloat(items[prod].kg)||0;
+      var pcs=parseFloat(items[prod].pcs)||0;
+      var v=kg>0?kg:(pcs>0?pcs*0.5:0);
+      if(v>0){
+        if(!CT_DEMAND[node.id])CT_DEMAND[node.id]={need:'',stock:''};
+        CT_DEMAND[node.id].stock=v.toFixed(1);
+        n++;
+      }
+    }
+  }
+  ctSaveDemand();render();
+  showToast(n>0?('Filled '+n+' products from Inventory'):'No matching products found');
+}
+
+function ctClearPlan(){
+  if(!confirm('Clear all demand and stock?'))return;
+  CT_DEMAND={};CT_RESULT=null;ctSaveDemand();render();showToast('Cleared');
+}
+
+// ---- Calculation engine ----
+function ctCalcNeeds(nodes,map){
+  map=map||{};
+  for(var i=0;i<nodes.length;i++){
+    var n=nodes[i];
+    var kids=n.kids||[];
+    if(kids.length)ctCalcNeeds(kids,map);
+    var d=CT_DEMAND[n.id]||{};
+    var need=parseFloat(d.need)||0;
+    var stock=parseFloat(d.stock)||0;
+    var self=Math.max(0,need-stock);
+    var forKids=0;
+    for(var j=0;j<kids.length;j++){
+      var kn=map[kids[j].id]?map[kids[j].id].needTotal:0;
+      if(kn>0&&kids[j].pct>0)forKids=Math.max(forKids,kn/(kids[j].pct/100));
+    }
+    map[n.id]={node:n,needSelf:self,forKids:forKids,needTotal:self+forKids};
+  }
+  return map;
+}
+
+function ctCalculate(){
+  var needs=ctCalcNeeds(CT_TREE);
+  var drivers=[];
+  for(var i=0;i<CT_TREE.length;i++){
+    var n=CT_TREE[i];
+    var t=needs[n.id];
+    if(t.needTotal>0&&n.pct>0){
+      drivers.push({name:n.name,raw:t.needTotal/(n.pct/100)});
+    }
+  }
+  if(!drivers.length){
+    CT_RESULT=null;render();
+    showToast('Stock already covers all demand');
+    return;
+  }
+  drivers.sort(function(a,b){return b.raw-a.raw;});
+  var raw=drivers[0].raw;
+  var flat=ctFlatten(CT_TREE);
+  var depthOf={};
+  for(var f=0;f<flat.length;f++)depthOf[flat[f].node.id]=flat[f].depth;
+  var rows=[];
+  (function dist(list,avail){
+    for(var i=0;i<list.length;i++){
+      var n=list[i];
+      var produced=avail*(n.pct/100);
+      var t=needs[n.id];
+      var d=CT_DEMAND[n.id]||{};
+      var need=parseFloat(d.need)||0;
+      var stock=parseFloat(d.stock)||0;
+      var kids=n.kids||[];
+      var sold=Math.min(produced,t.needSelf);
+      var left=produced-sold;
+      var toCut=kids.length?Math.min(left,t.forKids):0;
+      var surplus=left-toCut;
+      rows.push({node:n,depth:depthOf[n.id]||0,produced:produced,sold:sold,toCut:toCut,
+        balance:(sold+stock-need)+surplus});
+      if(kids.length)dist(kids,toCut);
+    }
+  })(CT_TREE,raw);
+  CT_RESULT={raw:raw,drivers:drivers,rows:rows};
+  render();
+}
+
+function ctRenderResult(){
+  var r=CT_RESULT;
+  if(!r)return '';
+  var h='<div style="background:linear-gradient(135deg,#6A1B9A,#4A148C);border-radius:12px;padding:18px;text-align:center;margin-top:14px;color:#fff">'
+    +'<div style="font-size:11px;opacity:.85;font-weight:700">RAW CHICKEN NEEDED</div>'
+    +'<div style="font-size:34px;font-weight:900;margin:4px 0">'+ctFmt(r.raw)+'</div>'
+    +'<div style="font-size:11px;opacity:.85">KG</div>'
+    +'<div style="font-size:11px;color:#E1BEE7;margin-top:5px">Driver: '+r.drivers[0].name+'</div>'
+    +'</div>';
+  h+='<div style="overflow-x:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse;font-size:11px">'
+    +'<thead><tr style="background:#6A1B9A;color:#fff">'
+    +'<th style="padding:6px 8px;text-align:left">Product</th>'
+    +'<th style="padding:6px 4px;text-align:center">Produced</th>'
+    +'<th style="padding:6px 4px;text-align:center">Sold</th>'
+    +'<th style="padding:6px 4px;text-align:center">To Cut</th>'
+    +'<th style="padding:6px 4px;text-align:center">Balance</th>'
+    +'</tr></thead><tbody>';
+  for(var i=0;i<r.rows.length;i++){
+    var x=r.rows[i];
+    if(x.produced<0.05)continue;
+    var bg=(i%2===0)?'#F8F5FA':'#fff';
+    var bc=x.balance>0.5?'#2E7D32':(x.balance<-0.5?'#C62828':'#78909C');
+    var sign=x.balance>0.5?'+':'';
+    h+='<tr style="background:'+bg+'">'
+      +'<td style="padding:4px 8px;padding-left:'+(8+x.depth*12)+'px;'+(x.node.bone?'color:#8D6E63;font-style:italic':'font-weight:600')+';font-size:'+(11-x.depth*0.4)+'px">'+(x.depth>0?'&#8627; ':'')+x.node.name+'</td>'
+      +'<td style="padding:4px;text-align:center">'+ctFmt(x.produced)+'</td>'
+      +'<td style="padding:4px;text-align:center;color:#1565C0">'+(x.sold>0?ctFmt(x.sold):'-')+'</td>'
+      +'<td style="padding:4px;text-align:center;color:#6A1B9A">'+(x.toCut>0?ctFmt(x.toCut):'-')+'</td>'
+      +'<td style="padding:4px;text-align:center;font-weight:700;color:'+bc+'">'+sign+ctFmt(x.balance)+'</td>'
+      +'</tr>';
+  }
+  h+='</tbody></table></div>';
+  return h;
+}
+
+// ---- Manual page ----
+function ctRenderManual(){
+  var raw=parseFloat(CT_MANUAL_RAW)||0;
+  var full=(CT_MANUAL_FULL!==false);
+  var h='<div style="background:#F3E5F5;border-radius:10px;padding:14px;margin-bottom:12px">'
+    +'<div style="font-size:11px;font-weight:700;color:#6A1B9A;margin-bottom:8px">Raw chicken weight (KG)</div>'
+    +'<input type="text" inputmode="decimal" value="'+(CT_MANUAL_RAW||'')+'" placeholder="0" '
+    +'oninput="CT_MANUAL_RAW=this.value;render()" '
+    +'style="width:100%;padding:11px;font-size:20px;font-weight:800;text-align:center;border:2px solid #6A1B9A;border-radius:9px">'
+    +'<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">';
+  var qs=[500,1000,1500,2000];
+  for(var i=0;i<qs.length;i++){
+    h+='<button onclick="CT_MANUAL_RAW='+qs[i]+';render()" style="flex:1;padding:7px;border:none;border-radius:7px;background:#fff;color:#6A1B9A;font-weight:700;font-size:11px;cursor:pointer">'+qs[i]+'</button>';
+  }
+  h+='</div></div>'
+    +'<label style="display:flex;align-items:center;gap:9px;padding:11px;background:#EDE7F6;border-radius:9px;cursor:pointer;margin-bottom:12px">'
+    +'<input type="checkbox" '+(full?'checked':'')+' onchange="CT_MANUAL_FULL=this.checked;render()" style="width:18px;height:18px">'
+    +'<span style="font-size:12px;font-weight:700">Full cutting &mdash; break down to the last level</span></label>';
+
+  if(raw<=0){
+    h+='<div style="text-align:center;padding:28px;color:#AB47BC;font-size:13px">Enter the raw chicken weight above</div>';
+    return h;
+  }
+
+  var finalTotal=0,boneTotal=0,rows='';
+  (function walk(list,avail,dep){
+    for(var i=0;i<list.length;i++){
+      var n=list[i];
+      var produced=avail*(n.pct/100);
+      var kids=n.kids||[];
+      var willCut=full&&kids.length>0;
+      if(!willCut){if(n.bone)boneTotal+=produced;else finalTotal+=produced;}
+      var clr=n.bone?'#8D6E63':(willCut?'#AB47BC':'#6A1B9A');
+      rows+='<tr style="background:'+((dep%2===0)?'#F8F5FA':'#fff')+'">'
+        +'<td style="padding:5px 8px;padding-left:'+(8+dep*13)+'px;font-size:'+(12-dep*0.5)+'px;'+(n.bone?'color:#8D6E63;font-style:italic':(willCut?'color:#AB47BC':'font-weight:600'))+'">'
+        +(dep>0?'&#8627; ':'')+n.name+(willCut?' <span style="font-size:9px;color:#1565C0">to cut</span>':'')+'</td>'
+        +'<td style="padding:5px 4px;text-align:center;font-weight:700;color:'+clr+(willCut?';opacity:.55':'')+'">'+ctFmt(produced)+'</td>'
+        +'</tr>';
+      if(kids.length&&full)walk(kids,produced,dep+1);
+    }
+  })(CT_TREE,raw,0);
+
+  h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+    +'<thead><tr style="background:#6A1B9A;color:#fff">'
+    +'<th style="padding:6px 8px;text-align:left">Product</th>'
+    +'<th style="padding:6px 4px;text-align:center;width:90px">KG</th>'
+    +'</tr></thead><tbody>'+rows+'</tbody></table></div>';
+
+  h+='<div style="display:flex;gap:8px;margin-top:12px">'
+    +'<div style="flex:1;background:#E8F5E9;border-radius:10px;padding:13px;text-align:center">'
+    +'<div style="font-size:10px;font-weight:700;color:#2E7D32">SELLABLE</div>'
+    +'<div style="font-size:22px;font-weight:900;color:#2E7D32">'+ctFmt(finalTotal)+'</div>'
+    +'<div style="font-size:10px;color:#78909C">'+Math.round(finalTotal/raw*100)+'%</div></div>'
+    +'<div style="flex:1;background:#FBE9E7;border-radius:10px;padding:13px;text-align:center">'
+    +'<div style="font-size:10px;font-weight:700;color:#8D6E63">BONE</div>'
+    +'<div style="font-size:22px;font-weight:900;color:#8D6E63">'+ctFmt(boneTotal)+'</div>'
+    +'<div style="font-size:10px;color:#78909C">'+Math.round(boneTotal/raw*100)+'%</div></div>'
+    +'</div>';
+  return h;
 }
 
 function ctRenderTree(){

@@ -5650,16 +5650,7 @@ function ctFindNode(id,nodes,parent){
 }
 
 function renderCuttingTab(){
-  var tabs=[['tree','Tree']];
-  var nav='';
-  for(var i=0;i<tabs.length;i++){
-    var on=CT_SUB===tabs[i][0];
-    nav+='<button class="ntb'+(on?' on':'')+'" style="'+(on?'background:#6A1B9A;color:#fff;':'')+'" onclick="CT_SUB=\''+tabs[i][0]+'\';render()">'+tabs[i][1]+'</button>';
-  }
-  var body=ctRenderTree();
-  return '<div class="card" style="padding:0">'
-    +'<div style="display:flex;gap:4px;padding:8px;background:#F3E5F5;overflow-x:auto;border-bottom:2px solid #CE93D8">'+nav+'</div>'
-    +'<div style="padding:10px">'+body+'</div></div>';
+  return '<div class="card">'+ctRenderTree()+'</div>';
 }
 
 function ctRenderTree(){

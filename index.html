@@ -331,7 +331,7 @@ const TABS=[
   {key:'settings',     emoji:'⚙️',ar:'Settings',     color:'#455A64',light:'#ECEFF1',border:'#B0BEC5'},
 ];
 const TABS_R1=['inventory','receivables','returns','sales','daysales','salesavg','stocksummary','waste','production','frozen','orders'];
-const TABS_R2=['records','formulaA','formulaB','diff','settings'];
+const TABS_R2=['records','formulaA','formulaB','diff','cutting','settings'];
 
 const TYPE_INFO={
   inventory:    {emoji:'📦',color:'#1565C0',label:'Inventory'},
@@ -583,6 +583,7 @@ function render(){
   else if(tab==='formulaB')     h+=renderFormula('b');
   else if(tab==='diff')         h+=renderDiff();
   else if(tab==='settings')     h+=renderSettings();
+  else if(tab==='cutting')      h+=renderCuttingTab();
   h+='</div>';
   document.getElementById('app').innerHTML=h;
   requestAnimationFrame(()=>{
@@ -5613,6 +5614,178 @@ function onWasteBlurSemi(p,el){
 
 
 
+
+
+// ===== CUTTING SYSTEM =====
+var CT_DEFAULT_TREE=[
+ {id:'breast',name:'Raw Breast',pct:28,kids:[
+   {id:'net_breast',name:'Breast Boneless',pct:72,final:true,kids:[]},
+   {id:'breast_bone',name:'Breast Bone',pct:28,bone:true,kids:[]}]},
+ {id:'legs',name:'Whole Legs',pct:27,final:true,kids:[
+   {id:'drum',name:'Drumstick',pct:50,final:true,kids:[]},
+   {id:'thigh',name:'Thigh',pct:50,final:true,kids:[
+     {id:'thigh_bl',name:'Thigh BL-SL',pct:65,final:true,kids:[]},
+     {id:'thigh_bone',name:'Thigh Bone',pct:35,bone:true,kids:[]}]}]},
+ {id:'wings',name:'Wings',pct:10.5,final:true,kids:[]},
+ {id:'skin',name:'Skin',pct:3,final:true,kids:[]},
+ {id:'other_bone',name:'Other Bone',pct:31.5,bone:true,kids:[]}];
+
+var CT_TREE=(function(){try{var s=localStorage.getItem('ct_tree');return s?JSON.parse(s):JSON.parse(JSON.stringify(CT_DEFAULT_TREE));}catch(e){return JSON.parse(JSON.stringify(CT_DEFAULT_TREE));}})();
+var CT_DEMAND=(function(){try{var s=localStorage.getItem('ct_demand');return s?JSON.parse(s):{};}catch(e){return {};}})();
+var CT_SUB='tree';
+
+function ctSaveTree(){try{localStorage.setItem('ct_tree',JSON.stringify(CT_TREE));}catch(e){}}
+function ctSaveDemand(){try{localStorage.setItem('ct_demand',JSON.stringify(CT_DEMAND));}catch(e){}}
+function ctEsc(s){return String(s).replace(/'/g,"").replace(/"/g,'');}
+function ctFmt(n){if(!isFinite(n))return '0';return Math.abs(n)>=100?Math.round(n).toLocaleString('en'):(Math.round(n*10)/10).toLocaleString('en');}
+
+function ctFindNode(id,nodes,parent){
+  nodes=nodes||CT_TREE;parent=parent||null;
+  for(var i=0;i<nodes.length;i++){
+    if(nodes[i].id===id)return {node:nodes[i],parent:parent,siblings:nodes};
+    var f=ctFindNode(id,nodes[i].kids||[],nodes[i]);
+    if(f)return f;
+  }
+  return null;
+}
+
+function renderCuttingTab(){
+  var tabs=[['tree','Tree']];
+  var nav='';
+  for(var i=0;i<tabs.length;i++){
+    var on=CT_SUB===tabs[i][0];
+    nav+='<button class="ntb'+(on?' on':'')+'" style="'+(on?'background:#6A1B9A;color:#fff;':'')+'" onclick="CT_SUB=\''+tabs[i][0]+'\';render()">'+tabs[i][1]+'</button>';
+  }
+  var body=ctRenderTree();
+  return '<div class="card" style="padding:0">'
+    +'<div style="display:flex;gap:4px;padding:8px;background:#F3E5F5;overflow-x:auto;border-bottom:2px solid #CE93D8">'+nav+'</div>'
+    +'<div style="padding:10px">'+body+'</div></div>';
+}
+
+function ctRenderTree(){
+  var h='<div style="display:flex;gap:6px;margin-bottom:12px">'
+    +'<button class="btn" style="background:#FFEBEE;color:#C62828;font-size:11px" onclick="ctResetTree()">Reset Default</button>'
+    +'<button class="btn" style="background:#6A1B9A;color:#fff;font-size:11px;flex:1" onclick="ctAddNode(null)">+ Main Product</button>'
+    +'</div>';
+  h+=ctTreeHtml(CT_TREE);
+  h+='<div style="font-size:10px;color:#78909C;margin-top:10px">Percent is relative to the parent. Main products are relative to raw chicken.</div>';
+  return h;
+}
+
+function ctTreeHtml(nodes){
+  var out='';
+  for(var i=0;i<nodes.length;i++){
+    var n=nodes[i];
+    var clr=n.bone?'#8D6E63':(n.final?'#2E7D32':'#1565C0');
+    var bg=n.bone?'#FBE9E7':(n.final?'#E8F5E9':'#E3F2FD');
+    var tag=n.bone?'Bone':(n.final?'Final':'Intermediate');
+    var nid=ctEsc(n.id);
+    var kidsHtml='';
+    if(n.kids&&n.kids.length){
+      kidsHtml='<div style="margin-left:18px;padding-left:12px;border-left:2px dashed #E0E0E0;margin-top:4px">'+ctTreeHtml(n.kids)+'</div>';
+    }
+    out+='<div style="margin-bottom:6px">';
+    out+='<div style="background:'+bg+';border:1.5px solid '+clr+'33;border-left:3px solid '+clr+';border-radius:9px;padding:10px 12px;display:flex;align-items:center;gap:8px">';
+    out+='<div style="flex:1;min-width:0">';
+    out+='<div style="font-size:13px;font-weight:700">'+n.name+'</div>';
+    out+='<span style="font-size:9px;background:'+clr+'22;color:'+clr+';padding:2px 6px;border-radius:4px;font-weight:700">'+tag+'</span>';
+    out+='</div>';
+    out+='<span style="font-size:12px;font-weight:800;color:#E65100;background:#FFF3E0;padding:4px 10px;border-radius:6px">'+n.pct+'%</span>';
+    out+='<button onclick="ctEditNode(\''+nid+'\')" style="background:#F5F5F5;border:1px solid #E0E0E0;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:12px">E</button>';
+    out+='<button onclick="ctAddNode(\''+nid+'\')" style="background:#E8F5E9;border:1px solid #A5D6A7;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:12px">+</button>';
+    out+='<button onclick="ctDelNode(\''+nid+'\')" style="background:#FFEBEE;border:1px solid #FFCDD2;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:12px">X</button>';
+    out+='</div>'+kidsHtml+'</div>';
+  }
+  return out;
+}
+
+function ctEditNode(id){
+  var f=ctFindNode(id);if(!f)return;
+  var n=f.node;
+  var pName=f.parent?f.parent.name:'Raw Chicken';
+  var m='<div id="ct-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center" onclick="if(event.target===this)document.getElementById(\'ct-modal\').remove()">'
+   +'<div style="background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:520px;padding:20px">'
+   +'<div style="font-size:15px;font-weight:800;margin-bottom:16px">Edit: '+n.name+'</div>'
+   +'<div style="margin-bottom:10px"><div style="font-size:10px;color:#78909C;margin-bottom:4px">Name</div>'
+   +'<input class="fi" id="ct_ed_name" value="'+n.name+'" style="width:100%"></div>'
+   +'<div style="margin-bottom:10px"><div style="font-size:10px;color:#78909C;margin-bottom:4px">Percent of '+pName+' (%)</div>'
+   +'<input class="fi" id="ct_ed_pct" type="text" inputmode="decimal" value="'+n.pct+'" style="width:100%;text-align:center"></div>'
+   +'<label style="display:flex;align-items:center;gap:8px;padding:10px;background:#E8F5E9;border-radius:8px;cursor:pointer;margin-bottom:8px">'
+   +'<input type="checkbox" id="ct_ed_final" '+(n.final?'checked':'')+' style="width:18px;height:18px">'
+   +'<span style="font-size:12px;font-weight:600">Final product (sellable)</span></label>'
+   +'<label style="display:flex;align-items:center;gap:8px;padding:10px;background:#FBE9E7;border-radius:8px;cursor:pointer;margin-bottom:16px">'
+   +'<input type="checkbox" id="ct_ed_bone" '+(n.bone?'checked':'')+' style="width:18px;height:18px">'
+   +'<span style="font-size:12px;font-weight:600">Goes to bone section</span></label>'
+   +'<div style="display:flex;gap:8px">'
+   +'<button class="btn" style="flex:1;background:#F5F5F5;color:#333" onclick="document.getElementById(\'ct-modal\').remove()">Cancel</button>'
+   +'<button class="btn" style="flex:1;background:#6A1B9A;color:#fff" onclick="ctSaveNode(\''+ctEsc(id)+'\')">Save</button>'
+   +'</div></div></div>';
+  document.body.insertAdjacentHTML('beforeend',m);
+}
+
+function ctSaveNode(id){
+  var f=ctFindNode(id);if(!f)return;
+  var name=document.getElementById('ct_ed_name').value.trim();
+  var pct=parseFloat(document.getElementById('ct_ed_pct').value);
+  if(!name){showToast('Name required');return;}
+  if(!isFinite(pct)||pct<0){showToast('Invalid percent');return;}
+  f.node.name=name;f.node.pct=pct;
+  f.node.final=document.getElementById('ct_ed_final').checked;
+  f.node.bone=document.getElementById('ct_ed_bone').checked;
+  ctSaveTree();document.getElementById('ct-modal').remove();render();showToast('Saved');
+}
+
+function ctAddNode(parentId){
+  var pName='Raw Chicken';
+  if(parentId){var f=ctFindNode(parentId);if(f)pName=f.node.name;}
+  var pArg=parentId?("'"+ctEsc(parentId)+"'"):'null';
+  var m='<div id="ct-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center" onclick="if(event.target===this)document.getElementById(\'ct-modal\').remove()">'
+   +'<div style="background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:520px;padding:20px">'
+   +'<div style="font-size:15px;font-weight:800;margin-bottom:16px">Add under: '+pName+'</div>'
+   +'<div style="margin-bottom:10px"><div style="font-size:10px;color:#78909C;margin-bottom:4px">Name</div>'
+   +'<input class="fi" id="ct_ad_name" placeholder="e.g. Breast Cubes" style="width:100%"></div>'
+   +'<div style="margin-bottom:10px"><div style="font-size:10px;color:#78909C;margin-bottom:4px">Percent of '+pName+' (%)</div>'
+   +'<input class="fi" id="ct_ad_pct" type="text" inputmode="decimal" placeholder="0" style="width:100%;text-align:center"></div>'
+   +'<label style="display:flex;align-items:center;gap:8px;padding:10px;background:#E8F5E9;border-radius:8px;cursor:pointer;margin-bottom:8px">'
+   +'<input type="checkbox" id="ct_ad_final" checked style="width:18px;height:18px">'
+   +'<span style="font-size:12px;font-weight:600">Final product</span></label>'
+   +'<label style="display:flex;align-items:center;gap:8px;padding:10px;background:#FBE9E7;border-radius:8px;cursor:pointer;margin-bottom:16px">'
+   +'<input type="checkbox" id="ct_ad_bone" style="width:18px;height:18px">'
+   +'<span style="font-size:12px;font-weight:600">Goes to bone section</span></label>'
+   +'<div style="display:flex;gap:8px">'
+   +'<button class="btn" style="flex:1;background:#F5F5F5;color:#333" onclick="document.getElementById(\'ct-modal\').remove()">Cancel</button>'
+   +'<button class="btn" style="flex:1;background:#6A1B9A;color:#fff" onclick="ctConfirmAdd('+pArg+')">Add</button>'
+   +'</div></div></div>';
+  document.body.insertAdjacentHTML('beforeend',m);
+}
+
+function ctConfirmAdd(parentId){
+  var name=document.getElementById('ct_ad_name').value.trim();
+  var pct=parseFloat(document.getElementById('ct_ad_pct').value);
+  if(!name){showToast('Name required');return;}
+  if(!isFinite(pct)||pct<0){showToast('Invalid percent');return;}
+  var node={id:'ct'+Date.now(),name:name,pct:pct,
+    final:document.getElementById('ct_ad_final').checked,
+    bone:document.getElementById('ct_ad_bone').checked,kids:[]};
+  if(parentId){var f=ctFindNode(parentId);if(f){if(!f.node.kids)f.node.kids=[];f.node.kids.push(node);}}
+  else CT_TREE.push(node);
+  ctSaveTree();document.getElementById('ct-modal').remove();render();showToast('Added');
+}
+
+function ctDelNode(id){
+  var f=ctFindNode(id);if(!f)return;
+  if(!confirm('Delete "'+f.node.name+'"?'))return;
+  f.siblings.splice(f.siblings.indexOf(f.node),1);
+  delete CT_DEMAND[id];
+  ctSaveTree();ctSaveDemand();render();showToast('Deleted');
+}
+
+function ctResetTree(){
+  if(!confirm('Reset to default tree?'))return;
+  CT_TREE=JSON.parse(JSON.stringify(CT_DEFAULT_TREE));
+  ctSaveTree();render();showToast('Reset done');
+}
+// ===== END CUTTING =====
 
 // ═══ BOOT ════════════════════════════════════════════
 // Load local defaults first

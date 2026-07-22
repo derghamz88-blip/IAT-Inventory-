@@ -5938,25 +5938,32 @@ function ctRenderTree(){
 }
 
 function ctTreeHtml(nodes,parent){
-  return nodes.map(n=>{
-    const clr=n.bone?'#8D6E63':n.final?'#2E7D32':'#1565C0';
-    const bg=n.bone?'#FBE9E7':n.final?'#E8F5E9':'#E3F2FD';
-    const tag=n.bone?'عظم':n.final?'نهائي':'وسيط';
-    const kidsHtml=(n.kids&&n.kids.length)?'<div style="margin-right:18px;padding-right:12px;border-right:2px dashed #E0E0E0;margin-top:4px">'+ctTreeHtml(n.kids,n)+'</div>':'';
-    return '<div style="margin-bottom:6px">'
-      +'<div style="background:'+bg+';border:1.5px solid '+clr+'33;border-right:3px solid '+clr+';border-radius:9px;padding:10px 12px;display:flex;align-items:center;gap:8px">'
-      +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:13px;font-weight:700">'+n.name+'</div>'
-      +'<span style="font-size:9px;background:'+clr+'22;color:'+clr+';padding:2px 6px;border-radius:4px;font-weight:700">'+tag+'</span>'
-      +'</div>'
-      +'<span style="font-size:12px;font-weight:800;color:#E65100;background:#FFF3E0;padding:4px 10px;border-radius:6px">'+n.pct+'%</span>'
-      +'<button onclick="ctEditNode(&quot;'+ctEsc(n.id)+'&quot;)" style="background:#F5F5F5;border:1px solid #E0E0E0;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:12px">&#9998;</button>'
-      +'<button onclick="ctAddNode(&quot;'+ctEsc(n.id)+'&quot;)" style="background:#E8F5E9;border:1px solid #A5D6A7;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:12px">+</button>'
-      +'<button onclick="ctDelNode(&quot;'+ctEsc(n.id)+'&quot;)" style="background:#FFEBEE;border:1px solid #FFCDD2;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:12px">&#x2715;</button>'
-      +'</div>'
-      +kidsHtml
-      +'</div>';
-  }).join('');
+  var out='';
+  for(var i=0;i<nodes.length;i++){
+    var n=nodes[i];
+    var clr=n.bone?'#8D6E63':(n.final?'#2E7D32':'#1565C0');
+    var bg=n.bone?'#FBE9E7':(n.final?'#E8F5E9':'#E3F2FD');
+    var tag=n.bone?'\u0639\u0638\u0645':(n.final?'\u0646\u0647\u0627\u0626\u064a':'\u0648\u0633\u064a\u0637');
+    var nid=ctEsc(n.id);
+    var kidsHtml='';
+    if(n.kids&&n.kids.length){
+      kidsHtml='<div style="margin-right:18px;padding-right:12px;border-right:2px dashed #E0E0E0;margin-top:4px">'+ctTreeHtml(n.kids,n)+'</div>';
+    }
+    out+='<div style="margin-bottom:6px">';
+    out+='<div style="background:'+bg+';border:1.5px solid '+clr+'33;border-right:3px solid '+clr+';border-radius:9px;padding:10px 12px;display:flex;align-items:center;gap:8px">';
+    out+='<div style="flex:1;min-width:0">';
+    out+='<div style="font-size:13px;font-weight:700">'+n.name+'</div>';
+    out+='<span style="font-size:9px;background:'+clr+'22;color:'+clr+';padding:2px 6px;border-radius:4px;font-weight:700">'+tag+'</span>';
+    out+='</div>';
+    out+='<span style="font-size:12px;font-weight:800;color:#E65100;background:#FFF3E0;padding:4px 10px;border-radius:6px">'+n.pct+'%</span>';
+    out+='<button onclick="ctEditNode(\''+nid+'\')" style="background:#F5F5F5;border:1px solid #E0E0E0;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:12px">&#9998;</button>';
+    out+='<button onclick="ctAddNode(\''+nid+'\')" style="background:#E8F5E9;border:1px solid #A5D6A7;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:12px">+</button>';
+    out+='<button onclick="ctDelNode(\''+nid+'\')" style="background:#FFEBEE;border:1px solid #FFCDD2;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:12px">&#215;</button>';
+    out+='</div>';
+    out+=kidsHtml;
+    out+='</div>';
+  }
+  return out;
 }
 
 function ctEditNode(id){
@@ -6054,6 +6061,7 @@ function ctResetTree(){
   ctSaveTree();render();showToast('✅ تمت الاستعادة');
 }
 // ══════════ END CUTTING SYSTEM ══════════
+
 
 
 // ═══ BOOT ════════════════════════════════════════════

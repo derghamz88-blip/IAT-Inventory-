@@ -2766,14 +2766,14 @@ function renderSalesAvg(){
       if(parentRow.todayQty>0||parentRow.avgQty>0)
         parentDetails[p].details.push({prod:p,todayQty:parentRow.todayQty,todayKg:parentRow.todayQty,avgKg:parentRow.avgQty,is500:false});
     }
-    // Children (500g)
+    // Children (500g) — getSalesQty already converted pcs→kg (pcs*0.5), so use as-is here
     rows.filter(r=>C_MAP&&C_MAP[r.prod]===p).forEach(child=>{
-      const kgT=child.todayQty*0.5;
-      const kgA=child.avgQty*0.5;
+      const kgT=child.todayQty;
+      const kgA=child.avgQty;
       parentDetails[p].todayKg+=kgT;
       parentDetails[p].avgKg+=kgA;
       if(child.todayQty>0||child.avgQty>0)
-        parentDetails[p].details.push({prod:child.prod,todayQty:child.todayQty,todayKg:kgT,avgKg:kgA,is500:true});
+        parentDetails[p].details.push({prod:child.prod,todayQty:kgT/0.5,todayKg:kgT,avgKg:kgA,is500:true});
     });
   });
 
@@ -5693,7 +5693,14 @@ function ctAvgSalesMap(days){
   for(var d in byDate){for(var p in byDate[d]){tot[p]=(tot[p]||0)+byDate[d][p];}}
   var avg={};
   for(var p in tot){avg[p]=tot[p]/days;}
-  return avg;
+  // Merge 500g child products into their parent (same as Sales Avg page's Comb KG).
+  // getSalesQty already converts 500g pcs->kg once, so just add as-is here.
+  var merged={};
+  for(var p2 in avg){
+    var parent=(C_MAP&&C_MAP[p2])?C_MAP[p2]:p2;
+    merged[parent]=(merged[parent]||0)+avg[p2];
+  }
+  return merged;
 }
 
 // ---- Match a cutting node to an inventory product name ----

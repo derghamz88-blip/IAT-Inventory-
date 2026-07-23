@@ -2597,6 +2597,24 @@ function getSalesQty(r){
   });
   return out;
 }
+// Merge Sales + Day Sales for a date range, preferring Sales over Day Sales when
+// both exist for the same date (Day Sales is a same-day placeholder that gets
+// superseded once the real Sales record for that date is uploaded — counting
+// both would double-count that day's sales).
+function getMergedSalesByDate(fromStr,toStr){
+  const dateSet={};
+  (D.sales||[]).forEach(r=>{if(r.date>=fromStr&&r.date<=toStr)dateSet[r.date]=true;});
+  (D.daySales||[]).forEach(r=>{if(r.date>=fromStr&&r.date<=toStr)dateSet[r.date]=true;});
+  const byDate={};
+  Object.keys(dateSet).forEach(d=>{
+    let recs=(D.sales||[]).filter(r=>r.date===d);
+    if(!recs.length)recs=(D.daySales||[]).filter(r=>r.date===d);
+    const merged={};
+    recs.forEach(r=>{Object.entries(getSalesQty(r)).forEach(([p,q])=>{merged[p]=(merged[p]||0)+q;});});
+    byDate[d]=merged;
+  });
+  return byDate;
+}
 function addAvgToFormula(fid){
   const period=S.salesAvgPeriod||'week';
   const now=new Date();
@@ -2605,16 +2623,7 @@ function addAvgToFormula(fid){
   const cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-days);
   const cutoffStr=cutoff.toISOString().split('T')[0];
 
-  const allSales=[...D.sales,...(D.daySales||[])].filter(r=>r.date>cutoffStr&&r.date<=todayStr);
-
-  // Merge by date
-  const byDate={};
-  allSales.forEach(r=>{
-    if(!byDate[r.date])byDate[r.date]={};
-    Object.entries(getSalesQty(r)).forEach(([prod,qty])=>{
-      byDate[r.date][prod]=(byDate[r.date][prod]||0)+qty;
-    });
-  });
+  const byDate=getMergedSalesByDate(cutoffStr,todayStr);
 
   const totals={};const dayCounts={};
   Object.entries(byDate).forEach(([date,prods])=>{
@@ -2658,16 +2667,9 @@ function renderSalesAvg(){
   const now=new Date();
   const todayStr=now.toISOString().split('T')[0];
 
-  // Get all sales records sorted by date desc
-  const allSales=[...D.sales].sort((a,b)=>b.date.localeCompare(a.date));
-  const daySalesAll=[...(D.daySales||[])].sort((a,b)=>b.date.localeCompare(a.date));
-
-  // Compare date: use selected date (default today), merge Sales+DaySales
+  // Compare date: use selected date (default today); Sales takes priority over Day Sales
   const compareStr=S.salesAvgCompare||todayStr;
-  const compareRecs=[...allSales,...daySalesAll].filter(r=>r.date===compareStr);
-  const compareMerged={};
-  compareRecs.forEach(r=>{Object.entries(getSalesQty(r)).forEach(([p,q])=>{compareMerged[p]=(compareMerged[p]||0)+q;});});
-  const todayItems=compareMerged;
+  const todayItems=getMergedSalesByDate(compareStr,compareStr)[compareStr]||{};
 
   // Filter records by period
   let days,cutoffStr,endStr=todayStr;
@@ -2683,17 +2685,9 @@ function renderSalesAvg(){
     cutoffStr=cutoff.toISOString().split('T')[0];
   }
 
-  // Merge Sales + Day Sales for period
-  const periodSales=[...allSales,...daySalesAll].filter(r=>r.date>=cutoffStr&&r.date<=endStr);
-
-  // Merge Sales + Day Sales by date (same date = one day)
-  const byDate={};
-  periodSales.forEach(r=>{
-    if(!byDate[r.date])byDate[r.date]={};
-    Object.entries(getSalesQty(r)).forEach(([prod,qty])=>{
-      byDate[r.date][prod]=(byDate[r.date][prod]||0)+qty;
-    });
-  });
+  // Merge Sales + Day Sales by date, Sales takes priority per date (no double counting)
+  const byDate=getMergedSalesByDate(cutoffStr,endStr);
+  const periodSales=Object.keys(byDate); // for record count display
 
   // Aggregate by product across all days
   const totals={};const dayCounts={};
@@ -5682,13 +5676,7 @@ function ctAvgSalesMap(days){
   var todayStr=now.toISOString().split('T')[0];
   var cut=new Date(now);cut.setDate(cut.getDate()-days);
   var cutStr=cut.toISOString().split('T')[0];
-  var recs=[].concat(D.sales||[],D.daySales||[]).filter(function(r){return r.date>cutStr&&r.date<=todayStr;});
-  var byDate={};
-  recs.forEach(function(r){
-    if(!byDate[r.date])byDate[r.date]={};
-    var q=getSalesQty(r);
-    for(var p in q){byDate[r.date][p]=(byDate[r.date][p]||0)+q[p];}
-  });
+  var byDate=getMergedSalesByDate(cutStr,todayStr);
   var tot={};
   for(var d in byDate){for(var p in byDate[d]){tot[p]=(tot[p]||0)+byDate[d][p];}}
   var avg={};
@@ -5892,7 +5880,7 @@ function ctCalculate(){
       var toCut=kids.length?Math.min(left,t.forKids):0;
       var surplus=left-toCut;
       rows.push({node:n,depth:depthOf[n.id]||0,produced:produced,sold:sold,toCut:toCut,
-        surplus:surplus,stock:stock,need:need,
+        surplus:surplus,stock:stock,need:need,missing:t.needSelf,
         balance:(sold+stock-need)+surplus});
       if(kids.length)dist(kids,toCut);
     }
@@ -5912,12 +5900,13 @@ function ctRenderResult(){
     +'</div>';
   h+='<div style="overflow-x:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse;font-size:11px">'
     +'<thead><tr style="background:#6A1B9A;color:#fff">'
-    +'<th style="padding:6px 8px;text-align:left">Product</th>'
-    +'<th style="padding:6px 4px;text-align:center">Produced</th>'
-    +'<th style="padding:6px 4px;text-align:center">Sold</th>'
-    +'<th style="padding:6px 4px;text-align:center">To Cut</th>'
-    +'<th style="padding:6px 4px;text-align:center">Surplus</th>'
-    +'<th style="padding:6px 4px;text-align:center">Balance</th>'
+    +'<th style="padding:6px 6px;text-align:left">Product</th>'
+    +'<th style="padding:6px 3px;text-align:center">Need</th>'
+    +'<th style="padding:6px 3px;text-align:center">Stock</th>'
+    +'<th style="padding:6px 3px;text-align:center;background:#B71C1C">Missing</th>'
+    +'<th style="padding:6px 3px;text-align:center">Produced</th>'
+    +'<th style="padding:6px 3px;text-align:center;background:#4A148C">To Cut</th>'
+    +'<th style="padding:6px 3px;text-align:center">Balance</th>'
     +'</tr></thead><tbody>';
   for(var i=0;i<r.rows.length;i++){
     var x=r.rows[i];
@@ -5926,11 +5915,12 @@ function ctRenderResult(){
     var bc=x.balance>0.5?'#2E7D32':(x.balance<-0.5?'#C62828':'#78909C');
     var sign=x.balance>0.5?'+':'';
     h+='<tr style="background:'+bg+'">'
-      +'<td style="padding:4px 8px;padding-left:'+(8+x.depth*12)+'px;'+(x.node.bone?'color:#8D6E63;font-style:italic':'font-weight:600')+';font-size:'+(11-x.depth*0.4)+'px">'+(x.depth>0?'&#8627; ':'')+x.node.name+'</td>'
+      +'<td style="padding:4px 6px;padding-left:'+(6+x.depth*12)+'px;'+(x.node.bone?'color:#8D6E63;font-style:italic':'font-weight:600')+';font-size:'+(11-x.depth*0.4)+'px">'+(x.depth>0?'&#8627; ':'')+x.node.name+'</td>'
+      +'<td style="padding:4px;text-align:center;color:#455A64">'+(x.need>0?ctFmt(x.need):'-')+'</td>'
+      +'<td style="padding:4px;text-align:center;color:#00838F">'+(x.stock>0?ctFmt(x.stock):'-')+'</td>'
+      +'<td style="padding:4px;text-align:center;font-weight:700;color:'+(x.missing>0.05?'#C62828':'#B0BEC5')+'">'+(x.missing>0.05?ctFmt(x.missing):'-')+'</td>'
       +'<td style="padding:4px;text-align:center">'+ctFmt(x.produced)+'</td>'
-      +'<td style="padding:4px;text-align:center;color:#1565C0">'+(x.sold>0?ctFmt(x.sold):'-')+'</td>'
-      +'<td style="padding:4px;text-align:center;color:#6A1B9A">'+(x.toCut>0?ctFmt(x.toCut):'-')+'</td>'
-      +'<td style="padding:4px;text-align:center;color:#00838F">'+(x.surplus>0.05?ctFmt(x.surplus):'-')+'</td>'
+      +'<td style="padding:4px;text-align:center;color:#6A1B9A;font-weight:700">'+(x.toCut>0?ctFmt(x.toCut):'-')+'</td>'
       +'<td style="padding:4px;text-align:center;font-weight:700;color:'+bc+'">'+sign+ctFmt(x.balance)+'</td>'
       +'</tr>';
   }

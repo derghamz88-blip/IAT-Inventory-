@@ -5615,17 +5615,17 @@ function onWasteBlurSemi(p,el){
 
 // ===== CUTTING SYSTEM =====
 var CT_DEFAULT_TREE=[
- {id:'breast',name:'Raw Breast',pct:28,kids:[
-   {id:'net_breast',name:'Breast Boneless',pct:72,final:true,kids:[]},
-   {id:'breast_bone',name:'Breast Bone',pct:28,bone:true,kids:[]}]},
- {id:'legs',name:'Whole Legs',pct:27,final:true,kids:[
-   {id:'drum',name:'Drumstick',pct:50,final:true,kids:[]},
-   {id:'thigh',name:'Thigh',pct:50,final:true,kids:[
-     {id:'thigh_bl',name:'Thigh BL-SL',pct:65,final:true,kids:[]},
-     {id:'thigh_bone',name:'Thigh Bone',pct:35,bone:true,kids:[]}]}]},
- {id:'wings',name:'Wings',pct:10.5,final:true,kids:[]},
- {id:'skin',name:'Skin',pct:3,final:true,kids:[]},
- {id:'other_bone',name:'Other Bone',pct:31.5,bone:true,kids:[]}];
+ {id:'breast_wb',name:'BREAST WITH BONE',pct:40,kids:[
+   {id:'breast',name:'Breast',pct:75,final:true,kids:[]},
+   {id:'skin',name:'Skin',pct:13.46,final:true,kids:[]},
+   {id:'minced',name:'Minced',pct:1.92,final:true,kids:[]}]},
+ {id:'legs',name:'Whole Legs',pct:28.46,final:true,kids:[
+   {id:'drum',name:'Drum',pct:43.24,final:true,kids:[]},
+   {id:'thigh',name:'Thigh',pct:54.05,final:true,kids:[
+     {id:'thigh_bl',name:'Thigh BL-SL',pct:70,final:true,kids:[]},
+     {id:'kashra',name:'Kashra',pct:30,final:true,kids:[]}]}]},
+ {id:'wings',name:'Wings',pct:10.77,final:true,kids:[]},
+ {id:'bone',name:'Bone',pct:27.69,bone:true,kids:[]}];
 
 var CT_TREE=(function(){try{var s=localStorage.getItem('ct_tree');return s?JSON.parse(s):JSON.parse(JSON.stringify(CT_DEFAULT_TREE));}catch(e){return JSON.parse(JSON.stringify(CT_DEFAULT_TREE));}})();
 var CT_DEMAND=(function(){try{var s=localStorage.getItem('ct_demand');return s?JSON.parse(s):{};}catch(e){return {};}})();
@@ -6033,8 +6033,9 @@ function ctEditNode(id){
   var m='<div id="ct-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center" onclick="if(event.target===this)document.getElementById(\'ct-modal\').remove()">'
    +'<div style="background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:520px;padding:20px">'
    +'<div style="font-size:15px;font-weight:800;margin-bottom:16px">Edit: '+n.name+'</div>'
-   +'<div style="margin-bottom:10px"><div style="font-size:10px;color:#78909C;margin-bottom:4px">Name</div>'
-   +'<input class="fi" id="ct_ed_name" value="'+n.name+'" style="width:100%"></div>'
+   +'<div style="margin-bottom:10px"><div style="font-size:10px;color:#78909C;margin-bottom:4px">Name (choose from Products, or type a custom name for bone/waste)</div>'
+   +'<input class="fi" id="ct_ed_name" list="ct-products-dl" value="'+n.name+'" style="width:100%">'
+   +'<datalist id="ct-products-dl">'+PRODUCTS.map(function(p){return '<option value="'+ctEsc(p)+'">';}).join('')+'</datalist></div>'
    +'<div style="margin-bottom:10px"><div style="font-size:10px;color:#78909C;margin-bottom:4px">Percent of '+pName+' (%)</div>'
    +'<input class="fi" id="ct_ed_pct" type="text" inputmode="decimal" value="'+n.pct+'" style="width:100%;text-align:center"></div>'
    +'<label style="display:flex;align-items:center;gap:8px;padding:10px;background:#E8F5E9;border-radius:8px;cursor:pointer;margin-bottom:8px">'
@@ -6069,8 +6070,9 @@ function ctAddNode(parentId){
   var m='<div id="ct-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center" onclick="if(event.target===this)document.getElementById(\'ct-modal\').remove()">'
    +'<div style="background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:520px;padding:20px">'
    +'<div style="font-size:15px;font-weight:800;margin-bottom:16px">Add under: '+pName+'</div>'
-   +'<div style="margin-bottom:10px"><div style="font-size:10px;color:#78909C;margin-bottom:4px">Name</div>'
-   +'<input class="fi" id="ct_ad_name" placeholder="e.g. Breast Cubes" style="width:100%"></div>'
+   +'<div style="margin-bottom:10px"><div style="font-size:10px;color:#78909C;margin-bottom:4px">Name (choose from Products, or type a custom name for bone/waste)</div>'
+   +'<input class="fi" id="ct_ad_name" list="ct-products-dl" placeholder="e.g. Breast Cubes" style="width:100%">'
+   +'<datalist id="ct-products-dl">'+PRODUCTS.map(function(p){return '<option value="'+ctEsc(p)+'">';}).join('')+'</datalist></div>'
    +'<div style="margin-bottom:10px"><div style="font-size:10px;color:#78909C;margin-bottom:4px">Percent of '+pName+' (%)</div>'
    +'<input class="fi" id="ct_ad_pct" type="text" inputmode="decimal" placeholder="0" style="width:100%;text-align:center"></div>'
    +'<label style="display:flex;align-items:center;gap:8px;padding:10px;background:#E8F5E9;border-radius:8px;cursor:pointer;margin-bottom:8px">'

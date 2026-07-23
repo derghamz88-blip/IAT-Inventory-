@@ -5885,6 +5885,7 @@ function ctCalculate(){
       var toCut=kids.length?Math.min(left,t.forKids):0;
       var surplus=left-toCut;
       rows.push({node:n,depth:depthOf[n.id]||0,produced:produced,sold:sold,toCut:toCut,
+        surplus:surplus,stock:stock,need:need,
         balance:(sold+stock-need)+surplus});
       if(kids.length)dist(kids,toCut);
     }
@@ -5908,6 +5909,7 @@ function ctRenderResult(){
     +'<th style="padding:6px 4px;text-align:center">Produced</th>'
     +'<th style="padding:6px 4px;text-align:center">Sold</th>'
     +'<th style="padding:6px 4px;text-align:center">To Cut</th>'
+    +'<th style="padding:6px 4px;text-align:center">Surplus</th>'
     +'<th style="padding:6px 4px;text-align:center">Balance</th>'
     +'</tr></thead><tbody>';
   for(var i=0;i<r.rows.length;i++){
@@ -5921,6 +5923,7 @@ function ctRenderResult(){
       +'<td style="padding:4px;text-align:center">'+ctFmt(x.produced)+'</td>'
       +'<td style="padding:4px;text-align:center;color:#1565C0">'+(x.sold>0?ctFmt(x.sold):'-')+'</td>'
       +'<td style="padding:4px;text-align:center;color:#6A1B9A">'+(x.toCut>0?ctFmt(x.toCut):'-')+'</td>'
+      +'<td style="padding:4px;text-align:center;color:#00838F">'+(x.surplus>0.05?ctFmt(x.surplus):'-')+'</td>'
       +'<td style="padding:4px;text-align:center;font-weight:700;color:'+bc+'">'+sign+ctFmt(x.balance)+'</td>'
       +'</tr>';
   }

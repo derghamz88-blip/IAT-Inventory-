@@ -5834,13 +5834,18 @@ function ctCalcNeeds(nodes,map){
     var d=CT_DEMAND[n.id]||{};
     var need=parseFloat(d.need)||0;
     var stock=parseFloat(d.stock)||0;
-    var self=Math.max(0,need-stock);
-    var forKids=0;
+    var ownMissing=Math.max(0,need-stock);      // this node's own shortfall vs its own stock
+    var leftover=Math.max(0,stock-need);        // surplus of this node's stock after its own need
+    var kidsNeedInN=0;                           // amount of THIS node needed (at fresh-cut basis) to satisfy kids
     for(var j=0;j<kids.length;j++){
       var kn=map[kids[j].id]?map[kids[j].id].needTotal:0;
-      if(kn>0&&kids[j].pct>0)forKids=Math.max(forKids,kn/(kids[j].pct/100));
+      if(kn>0&&kids[j].pct>0)kidsNeedInN=Math.max(kidsNeedInN,kn/(kids[j].pct/100));
     }
-    map[n.id]={node:n,needSelf:self,forKids:forKids,needTotal:self+forKids};
+    // Use existing surplus stock of this node first to cover kids' need before requiring fresh production
+    var fromLeftover=Math.min(leftover,kidsNeedInN);
+    var forKidsFresh=kidsNeedInN-fromLeftover;
+    map[n.id]={node:n,needSelf:ownMissing,leftover:leftover,kidsNeedInN:kidsNeedInN,
+      fromLeftover:fromLeftover,forKids:forKidsFresh,needTotal:ownMissing+forKidsFresh};
   }
   return map;
 }
@@ -5848,6 +5853,8 @@ function ctCalcNeeds(nodes,map){
 function ctCalculate(){
   var needs=ctCalcNeeds(CT_TREE);
   var drivers=[];
+  var anyLeftoverUse=false;
+  for(var id in needs){if(needs[id].fromLeftover>0.05)anyLeftoverUse=true;}
   for(var i=0;i<CT_TREE.length;i++){
     var n=CT_TREE[i];
     var t=needs[n.id];
@@ -5855,13 +5862,14 @@ function ctCalculate(){
       drivers.push({name:n.name,raw:t.needTotal/(n.pct/100)});
     }
   }
-  if(!drivers.length){
+  if(!drivers.length&&!anyLeftoverUse){
     CT_RESULT=null;render();
     showToast('Stock already covers all demand');
     return;
   }
   drivers.sort(function(a,b){return b.raw-a.raw;});
-  var raw=drivers[0].raw;
+  var raw=drivers.length?drivers[0].raw:0;
+  if(!drivers.length)drivers.push({name:'None (using existing stock only)',raw:0});
   var flat=ctFlatten(CT_TREE);
   var depthOf={};
   for(var f=0;f<flat.length;f++)depthOf[flat[f].node.id]=flat[f].depth;
@@ -5877,12 +5885,15 @@ function ctCalculate(){
       var kids=n.kids||[];
       var sold=Math.min(produced,t.needSelf);
       var left=produced-sold;
-      var toCut=kids.length?Math.min(left,t.forKids):0;
-      var surplus=left-toCut;
-      rows.push({node:n,depth:depthOf[n.id]||0,produced:produced,sold:sold,toCut:toCut,
-        surplus:surplus,stock:stock,need:need,missing:t.needSelf,
-        balance:(sold+stock-need)+surplus});
-      if(kids.length)dist(kids,toCut);
+      // Full cut: whatever remains of this node after its own demand is broken down into its children
+      var toCutFresh=kids.length?left:0;
+      var fromStock=kids.length?t.fromLeftover:0; // existing surplus stock repurposed into kids
+      var totalToKids=toCutFresh+fromStock;
+      var surplus=0;
+      rows.push({node:n,depth:depthOf[n.id]||0,produced:produced,sold:sold,toCut:toCutFresh,
+        fromStock:fromStock,surplus:surplus,stock:stock,need:need,missing:t.needSelf,
+        balance:produced+stock-need-toCutFresh-fromStock});
+      if(kids.length)dist(kids,totalToKids);
     }
   })(CT_TREE,raw);
   CT_RESULT={raw:raw,drivers:drivers,rows:rows};
@@ -5896,7 +5907,7 @@ function ctRenderResult(){
     +'<div style="font-size:11px;opacity:.85;font-weight:700">RAW CHICKEN NEEDED</div>'
     +'<div style="font-size:34px;font-weight:900;margin:4px 0">'+ctFmt(r.raw)+'</div>'
     +'<div style="font-size:11px;opacity:.85">KG</div>'
-    +'<div style="font-size:11px;color:#E1BEE7;margin-top:5px">Driver: '+r.drivers[0].name+'</div>'
+    +'<div style="font-size:11px;color:#E1BEE7;margin-top:5px">'+(r.raw>0.05?'Driver: '+r.drivers[0].name:'✅ Existing stock covers everything — just cut what\'s shown below')+'</div>'
     +'</div>';
   h+='<div style="overflow-x:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse;font-size:11px">'
     +'<thead><tr style="background:#6A1B9A;color:#fff">'
@@ -5906,21 +5917,26 @@ function ctRenderResult(){
     +'<th style="padding:6px 3px;text-align:center;background:#B71C1C">Missing</th>'
     +'<th style="padding:6px 3px;text-align:center">Produced</th>'
     +'<th style="padding:6px 3px;text-align:center;background:#4A148C">To Cut</th>'
-    +'<th style="padding:6px 3px;text-align:center">Balance</th>'
+    +'<th style="padding:6px 3px;text-align:center;background:#00695C">Total</th>'
+    +'<th style="padding:6px 3px;text-align:center">Final</th>'
     +'</tr></thead><tbody>';
   for(var i=0;i<r.rows.length;i++){
     var x=r.rows[i];
-    if(x.produced<0.05)continue;
+    if(x.produced<0.05&&x.stock<0.05&&x.need<0.05&&x.fromStock<0.05)continue;
+    var total=x.produced+x.stock-x.toCut-x.fromStock; // available after cutting into children, before orders
     var bg=(i%2===0)?'#F8F5FA':'#fff';
     var bc=x.balance>0.5?'#2E7D32':(x.balance<-0.5?'#C62828':'#78909C');
     var sign=x.balance>0.5?'+':'';
     h+='<tr style="background:'+bg+'">'
-      +'<td style="padding:4px 6px;padding-left:'+(6+x.depth*12)+'px;'+(x.node.bone?'color:#8D6E63;font-style:italic':'font-weight:600')+';font-size:'+(11-x.depth*0.4)+'px">'+(x.depth>0?'&#8627; ':'')+x.node.name+'</td>'
+      +'<td style="padding:4px 6px;padding-left:'+(6+x.depth*12)+'px;'+(x.node.bone?'color:#8D6E63;font-style:italic':'font-weight:600')+';font-size:'+(11-x.depth*0.4)+'px">'+(x.depth>0?'&#8627; ':'')+x.node.name
+      +(x.fromStock>0.05?'<div style="font-size:9px;font-weight:600;color:#2E7D32">&#8627; +'+ctFmt(x.fromStock)+' from existing stock (no new cutting needed)</div>':'')
+      +'</td>'
       +'<td style="padding:4px;text-align:center;color:#455A64">'+(x.need>0?ctFmt(x.need):'-')+'</td>'
       +'<td style="padding:4px;text-align:center;color:#00838F">'+(x.stock>0?ctFmt(x.stock):'-')+'</td>'
       +'<td style="padding:4px;text-align:center;font-weight:700;color:'+(x.missing>0.05?'#C62828':'#B0BEC5')+'">'+(x.missing>0.05?ctFmt(x.missing):'-')+'</td>'
       +'<td style="padding:4px;text-align:center">'+ctFmt(x.produced)+'</td>'
-      +'<td style="padding:4px;text-align:center;color:#6A1B9A;font-weight:700">'+(x.toCut>0?ctFmt(x.toCut):'-')+'</td>'
+      +'<td style="padding:4px;text-align:center;color:#6A1B9A;font-weight:700">'+((x.toCut+x.fromStock)>0?ctFmt(x.toCut+x.fromStock):'-')+'</td>'
+      +'<td style="padding:4px;text-align:center;color:#00695C;font-weight:700">'+ctFmt(total)+'</td>'
       +'<td style="padding:4px;text-align:center;font-weight:700;color:'+bc+'">'+sign+ctFmt(x.balance)+'</td>'
       +'</tr>';
   }

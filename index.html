@@ -5628,6 +5628,7 @@ var CT_DEFAULT_TREE=[
  {id:'bone',name:'Bone',pct:27.69,bone:true,kids:[]}];
 
 var CT_TREE=(function(){try{var s=localStorage.getItem('ct_tree');return s?JSON.parse(s):JSON.parse(JSON.stringify(CT_DEFAULT_TREE));}catch(e){return JSON.parse(JSON.stringify(CT_DEFAULT_TREE));}})();
+var CT_ROOT_ID='__whole_chicken__';
 var CT_DEMAND=(function(){try{var s=localStorage.getItem('ct_demand');return s?JSON.parse(s):{};}catch(e){return {};}})();
 var CT_SUB='tree';
 var CT_PERIOD=7;
@@ -5733,6 +5734,18 @@ function ctRenderPlan(){
     +'<th style="padding:6px 4px;text-align:center;width:78px">Need</th>'
     +'<th style="padding:6px 4px;text-align:center;width:78px">Stock</th>'
     +'</tr></thead><tbody>';
+  // Whole chicken row: Need = whole chicken orders (sold uncut), Stock = raw chicken you have
+  var rd=CT_DEMAND[CT_ROOT_ID]||{};
+  h+='<tr style="background:#EDE7F6">'
+    +'<td style="padding:5px 8px;font-weight:800;font-size:11px;color:#4A148C">&#128075; Whole Chicken (raw)'
+    +'<div style="font-size:9px;font-weight:600;color:#7B1FA2">Need = sold uncut &nbsp;|&nbsp; Stock = raw chicken on hand</div></td>'
+    +'<td style="padding:3px"><input type="text" inputmode="decimal" value="'+(rd.need||'')+'" placeholder="0" '
+    +'oninput="ctSetDemand(\''+CT_ROOT_ID+'\',\'need\',this.value)" '
+    +'style="width:100%;padding:5px;text-align:center;border:2px solid #7B1FA2;border-radius:6px;font-size:11px"></td>'
+    +'<td style="padding:3px"><input type="text" inputmode="decimal" value="'+(rd.stock||'')+'" placeholder="0" '
+    +'oninput="ctSetDemand(\''+CT_ROOT_ID+'\',\'stock\',this.value)" '
+    +'style="width:100%;padding:5px;text-align:center;border:2px solid #2E7D32;border-radius:6px;font-size:11px"></td>'
+    +'</tr>';
   var shown=0;
   for(var k=0;k<flat.length;k++){
     var n=flat[k].node,dep=flat[k].depth;
@@ -5790,6 +5803,12 @@ function ctPullFromSales(){
       n++;
     }
   }
+  // Whole chicken sold uncut
+  if(avg['Chicken']>0){
+    if(!CT_DEMAND[CT_ROOT_ID])CT_DEMAND[CT_ROOT_ID]={need:'',stock:''};
+    CT_DEMAND[CT_ROOT_ID].need=avg['Chicken'].toFixed(1);
+    n++;
+  }
   ctSaveDemand();render();
   showToast(n>0?('Filled '+n+' products from Sales Avg'):'No matching products found');
 }
@@ -5813,6 +5832,17 @@ function ctFillStockFromInventory(){
         CT_DEMAND[node.id].stock=v.toFixed(1);
         n++;
       }
+    }
+  }
+  // Raw whole chicken stock on hand
+  if(items['Chicken']){
+    var ckg=parseFloat(items['Chicken'].kg)||0;
+    var cpcs=parseFloat(items['Chicken'].pcs)||0;
+    var cv=ckg>0?ckg:(cpcs>0?cpcs*0.5:0);
+    if(cv>0){
+      if(!CT_DEMAND[CT_ROOT_ID])CT_DEMAND[CT_ROOT_ID]={need:'',stock:''};
+      CT_DEMAND[CT_ROOT_ID].stock=cv.toFixed(1);
+      n++;
     }
   }
   ctSaveDemand();render();
@@ -5862,14 +5892,22 @@ function ctCalculate(){
       drivers.push({name:n.name,raw:t.needTotal/(n.pct/100)});
     }
   }
-  if(!drivers.length&&!anyLeftoverUse){
+  var rootD0=CT_DEMAND[CT_ROOT_ID]||{};
+  var wholeNeed0=parseFloat(rootD0.need)||0;
+  if(!drivers.length&&!anyLeftoverUse&&wholeNeed0<0.05){
     CT_RESULT=null;render();
     showToast('Stock already covers all demand');
     return;
   }
   drivers.sort(function(a,b){return b.raw-a.raw;});
-  var raw=drivers.length?drivers[0].raw:0;
+  var rawCut=drivers.length?drivers[0].raw:0;
   if(!drivers.length)drivers.push({name:'None (using existing stock only)',raw:0});
+  // Whole chicken sold uncut consumes raw chicken separately from the cutting requirement
+  var rootD=CT_DEMAND[CT_ROOT_ID]||{};
+  var wholeNeed=parseFloat(rootD.need)||0;
+  var rawStock=parseFloat(rootD.stock)||0;
+  var rawTotal=rawCut+wholeNeed;
+  var raw=rawCut;
   var flat=ctFlatten(CT_TREE);
   var depthOf={};
   for(var f=0;f<flat.length;f++)depthOf[flat[f].node.id]=flat[f].depth;
@@ -5896,7 +5934,7 @@ function ctCalculate(){
       if(kids.length)dist(kids,totalToKids);
     }
   })(CT_TREE,raw);
-  CT_RESULT={raw:raw,drivers:drivers,rows:rows};
+  CT_RESULT={raw:raw,rawCut:rawCut,wholeNeed:wholeNeed,rawTotal:rawTotal,rawStock:rawStock,drivers:drivers,rows:rows};
   render();
 }
 
@@ -5905,10 +5943,28 @@ function ctRenderResult(){
   if(!r)return '';
   var h='<div style="background:linear-gradient(135deg,#6A1B9A,#4A148C);border-radius:12px;padding:18px;text-align:center;margin-top:14px;color:#fff">'
     +'<div style="font-size:11px;opacity:.85;font-weight:700">RAW CHICKEN NEEDED</div>'
-    +'<div style="font-size:34px;font-weight:900;margin:4px 0">'+ctFmt(r.raw)+'</div>'
+    +'<div style="font-size:34px;font-weight:900;margin:4px 0">'+ctFmt(r.rawTotal)+'</div>'
     +'<div style="font-size:11px;opacity:.85">KG</div>'
-    +'<div style="font-size:11px;color:#E1BEE7;margin-top:5px">'+(r.raw>0.05?'Driver: '+r.drivers[0].name:'✅ Existing stock covers everything — just cut what\'s shown below')+'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:12px;font-size:11px">'
+    +'<div style="flex:1;background:rgba(255,255,255,.14);border-radius:8px;padding:8px">'
+    +'<div style="opacity:.8;font-size:10px">For Cutting</div>'
+    +'<div style="font-size:17px;font-weight:800">'+ctFmt(r.rawCut)+'</div>'
+    +'<div style="font-size:9px;color:#E1BEE7">'+(r.rawCut>0.05?r.drivers[0].name:'covered by stock')+'</div></div>'
+    +'<div style="flex:1;background:rgba(255,255,255,.14);border-radius:8px;padding:8px">'
+    +'<div style="opacity:.8;font-size:10px">Whole Chicken Orders</div>'
+    +'<div style="font-size:17px;font-weight:800">'+ctFmt(r.wholeNeed)+'</div>'
+    +'<div style="font-size:9px;color:#E1BEE7">sold uncut</div></div>'
     +'</div>';
+  if(r.rawStock>0.05||r.rawTotal>0.05){
+    var diff=r.rawStock-r.rawTotal;
+    var ok=diff>=-0.05;
+    h+='<div style="margin-top:10px;background:'+(ok?'rgba(76,175,80,.28)':'rgba(244,67,54,.3)')+';border-radius:8px;padding:9px;font-size:11px">'
+      +'<div style="opacity:.9">Raw chicken stock: <b>'+ctFmt(r.rawStock)+'</b> kg</div>'
+      +'<div style="font-weight:800;font-size:13px;margin-top:3px">'
+      +(ok?('&#9989; Enough — surplus '+ctFmt(diff)+' kg'):('&#9888; Short by '+ctFmt(Math.abs(diff))+' kg'))
+      +'</div></div>';
+  }
+  h+='</div>';
   h+='<div style="overflow-x:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse;font-size:11px">'
     +'<thead><tr style="background:#6A1B9A;color:#fff">'
     +'<th style="padding:6px 6px;text-align:left">Product</th>'

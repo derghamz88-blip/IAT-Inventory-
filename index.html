@@ -5655,21 +5655,246 @@ function ctFindNode(id,nodes,parent){
 function ctSub(k){CT_SUB=k;render();}
 
 function renderCuttingTab(){
-  var tabs=[['tree','Tree'],['plan','Plan'],['manual','Manual']];
+  var tabs=[['tree','Tree'],['plan','Plan'],['manual','Manual'],['order','🛍️ Order']];
   var nav='';
   for(var i=0;i<tabs.length;i++){
     var on=(CT_SUB===tabs[i][0]);
-    nav+='<button onclick="ctSub(\''+tabs[i][0]+'\')" style="flex:1;padding:8px 4px;border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;'
+    nav+='<button onclick="ctSub(\''+tabs[i][0]+'\')" style="flex:1;padding:8px 3px;border:none;border-radius:8px;cursor:pointer;font-size:11px;font-weight:700;'
       +(on?'background:#6A1B9A;color:#fff':'background:#F3E5F5;color:#6A1B9A')+'">'+tabs[i][1]+'</button>';
   }
   var body='';
   if(CT_SUB==='plan')body=ctRenderPlan();
   else if(CT_SUB==='manual')body=ctRenderManual();
+  else if(CT_SUB==='order')body=ctRenderOrder();
   else body=ctRenderTree();
   return '<div class="card">'
     +'<div style="display:flex;gap:5px;margin-bottom:12px">'+nav+'</div>'
     +body+'</div>';
 }
+
+// ---- Cutting: Order sheet (end-of-day purchase planning) ----
+var CT_ORDER=(function(){try{var s=localStorage.getItem('ct_order');return s?JSON.parse(s):{};}catch(e){return {};}})();
+function ctSaveOrder(){try{localStorage.setItem('ct_order',JSON.stringify(CT_ORDER));}catch(e){}}
+function ctSetOrder(k,v){CT_ORDER[k]=v;ctSaveOrder();}
+function ctOrderNum(k){return parseFloat(normalizeNum(CT_ORDER[k]))||0;}
+
+var CT_OFFAL=[['gizzard','Gizzard','Gizzard'],['liver','Liver','Liver'],['heart','Heart','Heart']];
+
+function ctOrderPullSales(){
+  var avg=ctAvgSalesMap(CT_PERIOD||7);
+  var n=0;
+  if(avg['Chicken']>0){CT_ORDER.small_need=avg['Chicken'].toFixed(1);n++;}
+  for(var i=0;i<CT_OFFAL.length;i++){
+    var p=CT_OFFAL[i][2];
+    if(avg[p]>0){CT_ORDER[CT_OFFAL[i][0]+'_need']=avg[p].toFixed(1);n++;}
+  }
+  // Large chicken need comes from the cutting plan requirement
+  if(CT_RESULT&&CT_RESULT.rawCut>0)CT_ORDER.large_need=CT_RESULT.rawCut.toFixed(1);
+  ctSaveOrder();render();
+  showToast(n>0?('Filled '+n+' items from Sales Avg'):'No matching products');
+}
+
+function ctOrderPullStock(){
+  var latest=(D.inventories&&D.inventories.length)?D.inventories[0]:null;
+  if(!latest){showToast('No inventory record found');return;}
+  var items=expandItems(latest.items);
+  function val(p){
+    if(!items[p])return 0;
+    var kg=parseFloat(items[p].kg)||0,pcs=parseFloat(items[p].pcs)||0;
+    return kg>0?kg:(pcs>0?pcs*0.5:0);
+  }
+  var n=0;
+  var ck=val('Chicken');
+  if(ck>0){CT_ORDER.small_stock=ck.toFixed(1);n++;}
+  for(var i=0;i<CT_OFFAL.length;i++){
+    var v=val(CT_OFFAL[i][2]);
+    if(v>0){CT_ORDER[CT_OFFAL[i][0]+'_stock']=v.toFixed(1);n++;}
+  }
+  ctSaveOrder();render();
+  showToast(n>0?('Filled '+n+' items from Inventory (date: '+latest.date+')'):'No matching products');
+}
+
+function ctOrderRows(){
+  var rows=[];
+  rows.push({key:'small',icon:'🐔',label:'Small weight (sold whole)',
+    need:ctOrderNum('small_need'),stock:ctOrderNum('small_stock')});
+  rows.push({key:'large',icon:'🔪',label:'Large weight (for cutting)',
+    need:ctOrderNum('large_need'),stock:ctOrderNum('large_stock')});
+  for(var i=0;i<CT_OFFAL.length;i++){
+    rows.push({key:CT_OFFAL[i][0],icon:'🫀',label:CT_OFFAL[i][1],
+      need:ctOrderNum(CT_OFFAL[i][0]+'_need'),stock:ctOrderNum(CT_OFFAL[i][0]+'_stock')});
+  }
+  var safety=parseFloat(normalizeNum(CT_ORDER.safety))||0;
+  for(var j=0;j<rows.length;j++){
+    var r=rows[j];
+    if(r.key==='large'){
+      // The cutting plan already netted out cut-product stock, so only subtract
+      // raw large-weight chicken already on hand. No safety margin here: the
+      // margin is applied to the cut products' demand inside the plan instead.
+      r.target=r.need;
+    } else {
+      r.target=r.need*(1+safety/100);
+    }
+    r.order=Math.max(0,r.target-r.stock);
+  }
+  return rows;
+}
+
+// Evening: push cut-product stock into the Plan, recalculate, and read back the cutting requirement
+function ctEveningApply(){
+  var avg=ctAvgSalesMap(CT_PERIOD||7);
+  var flat=ctFlatten(CT_TREE);
+  var safety=parseFloat(normalizeNum(CT_ORDER.safety))||0;
+  var mult=1+safety/100;
+  // 1) demand for every cut product from sales average (with safety margin)
+  for(var i=0;i<flat.length;i++){
+    var node=flat[i].node;
+    var prod=ctMatchProduct(node.name);
+    if(!CT_DEMAND[node.id])CT_DEMAND[node.id]={need:'',stock:''};
+    if(prod&&avg[prod]>0)CT_DEMAND[node.id].need=(avg[prod]*mult).toFixed(1);
+    // 2) stock straight from what the supervisor typed on this page
+    var v=CT_ORDER['cut_'+node.id];
+    CT_DEMAND[node.id].stock=(v===undefined||v==='')?'':String(parseFloat(normalizeNum(v))||0);
+  }
+  // whole chicken row: demand = whole chicken sales avg, stock = small weight count
+  if(!CT_DEMAND[CT_ROOT_ID])CT_DEMAND[CT_ROOT_ID]={need:'',stock:''};
+  if(avg['Chicken']>0)CT_DEMAND[CT_ROOT_ID].need=(avg['Chicken']*mult).toFixed(1);
+  CT_DEMAND[CT_ROOT_ID].stock=String(ctOrderNum('small_stock'));
+  ctSaveDemand();
+  // 3) needs for the order sheet itself
+  if(avg['Chicken']>0)CT_ORDER.small_need=avg['Chicken'].toFixed(1);
+  for(var k=0;k<CT_OFFAL.length;k++){
+    var p=CT_OFFAL[k][2];
+    if(avg[p]>0)CT_ORDER[CT_OFFAL[k][0]+'_need']=avg[p].toFixed(1);
+  }
+  ctSaveOrder();
+  // 4) run the cutting plan, then take the raw-chicken-for-cutting figure
+  ctCalculate();
+  CT_ORDER.large_need=(CT_RESULT&&CT_RESULT.rawCut>0)?CT_RESULT.rawCut.toFixed(1):'0';
+  ctSaveOrder();
+  render();
+  showToast('✅ Calculated from evening count');
+}
+
+function ctRenderOrder(){
+  var rows=ctOrderRows();
+  var h='<div style="background:#E0F7FA;border-radius:10px;padding:10px;margin-bottom:10px">'
+    +'<div style="font-size:12px;font-weight:800;color:#00695C">🌙 Evening count — order for tomorrow</div>'
+    +'<div style="font-size:10px;color:#00838F;margin-top:3px">Enter tonight\'s stock, then press Calculate. Demand comes from Sales Avg ('+(CT_PERIOD===3?'3 days':(CT_PERIOD===30?'month':'week'))+').</div>'
+    +'<div style="display:flex;align-items:center;gap:7px;margin-top:8px">'
+    +'<span style="font-size:11px;font-weight:700;color:#00695C">Safety margin %</span>'
+    +'<input type="text" inputmode="decimal" value="'+(CT_ORDER.safety||'')+'" placeholder="0" '
+    +'oninput="ctSetOrder(\'safety\',this.value)" '
+    +'style="width:66px;padding:5px;text-align:center;border:2px solid #00838F;border-radius:6px;font-size:11px">'
+    +'<button onclick="ctOrderClear()" style="margin-left:auto;padding:6px 12px;border:1px solid #EF9A9A;border-radius:7px;background:#FFEBEE;color:#C62828;font-weight:700;font-size:11px;cursor:pointer">Clear</button>'
+    +'</div></div>';
+
+  // --- Section 1: raw chicken counts ---
+  h+='<div style="font-size:11px;font-weight:800;color:#4A148C;margin:10px 0 5px">1️⃣ Raw chicken in stock</div>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:11px">';
+  var raws=[['small','🐔','Small weight (sold whole)'],['large','🔪','Large weight (for cutting)']];
+  for(var a=0;a<raws.length;a++){
+    h+='<tr style="background:'+(a%2===0?'#F5FDFC':'#fff')+'">'
+      +'<td style="padding:5px 6px;font-weight:700">'+raws[a][1]+' '+raws[a][2]+'</td>'
+      +'<td style="padding:3px;width:90px"><input type="text" inputmode="decimal" value="'+(CT_ORDER[raws[a][0]+'_stock']||'')+'" placeholder="0 kg" '
+      +'oninput="ctSetOrder(\''+raws[a][0]+'_stock\',this.value)" '
+      +'style="width:100%;padding:6px;text-align:center;border:2px solid #A5D6A7;border-radius:6px;font-size:11px"></td>'
+      +'</tr>';
+  }
+  h+='</table>';
+
+  // --- Section 2: cut products ---
+  h+='<div style="font-size:11px;font-weight:800;color:#4A148C;margin:12px 0 5px">2️⃣ Cut products in stock</div>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:11px">';
+  var flat=ctFlatten(CT_TREE);
+  for(var i=0;i<flat.length;i++){
+    var node=flat[i].node,dep=flat[i].depth||0;
+    h+='<tr style="background:'+(i%2===0?'#F8F5FA':'#fff')+'">'
+      +'<td style="padding:5px 6px;padding-left:'+(6+dep*12)+'px;'+(node.bone?'color:#8D6E63;font-style:italic':'font-weight:600')+'">'
+      +(dep>0?'&#8627; ':'')+node.name+'</td>'
+      +'<td style="padding:3px;width:90px"><input type="text" inputmode="decimal" value="'+(CT_ORDER['cut_'+node.id]||'')+'" placeholder="0 kg" '
+      +'oninput="ctSetOrder(\'cut_'+node.id+'\',this.value)" '
+      +'style="width:100%;padding:6px;text-align:center;border:2px solid #A5D6A7;border-radius:6px;font-size:11px"></td>'
+      +'</tr>';
+  }
+  h+='</table>';
+
+  // --- Section 3: offal ---
+  h+='<div style="font-size:11px;font-weight:800;color:#4A148C;margin:12px 0 5px">3️⃣ Offal in stock (bought separately)</div>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:11px">';
+  for(var b=0;b<CT_OFFAL.length;b++){
+    h+='<tr style="background:'+(b%2===0?'#F5FDFC':'#fff')+'">'
+      +'<td style="padding:5px 6px;font-weight:700">🫀 '+CT_OFFAL[b][1]+'</td>'
+      +'<td style="padding:3px;width:90px"><input type="text" inputmode="decimal" value="'+(CT_ORDER[CT_OFFAL[b][0]+'_stock']||'')+'" placeholder="0 kg" '
+      +'oninput="ctSetOrder(\''+CT_OFFAL[b][0]+'_stock\',this.value)" '
+      +'style="width:100%;padding:6px;text-align:center;border:2px solid #A5D6A7;border-radius:6px;font-size:11px"></td>'
+      +'</tr>';
+  }
+  h+='</table>';
+
+  h+='<button onclick="ctEveningApply()" style="width:100%;margin-top:14px;padding:13px;border:none;border-radius:10px;background:#6A1B9A;color:#fff;font-weight:800;font-size:13px;cursor:pointer">🧮 Calculate Order</button>';
+
+  // --- Result ---
+  var any=false;
+  for(var c=0;c<rows.length;c++){if(rows[c].need>0.05||rows[c].order>0.05)any=true;}
+  if(any){
+    h+='<div style="font-size:11px;font-weight:800;color:#00695C;margin:16px 0 5px">📋 Order for tomorrow</div>'
+      +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">'
+      +'<thead><tr style="background:#00838F;color:#fff">'
+      +'<th style="padding:6px;text-align:left">Item</th>'
+      +'<th style="padding:6px 3px;text-align:center;width:56px">Need</th>'
+      +'<th style="padding:6px 3px;text-align:center;width:56px">Stock</th>'
+      +'<th style="padding:6px 3px;text-align:center;background:#004D40;width:62px">Order</th>'
+      +'</tr></thead><tbody>';
+    for(var d=0;d<rows.length;d++){
+      var r=rows[d];
+      var hint=(r.key==='large'&&CT_RESULT&&CT_RESULT.rawCut>0)
+        ?'<div style="font-size:9px;color:#00695C;font-weight:600">cutting plan: '+ctFmt(CT_RESULT.rawCut)+' kg</div>':'';
+      h+='<tr style="background:'+(d%2===0?'#F5FDFC':'#fff')+'">'
+        +'<td style="padding:5px 6px;font-weight:700">'+r.icon+' '+r.label+hint+'</td>'
+        +'<td style="padding:5px 3px;text-align:center;color:#455A64">'+(r.need>0.05?ctFmt(r.need):'—')+'</td>'
+        +'<td style="padding:5px 3px;text-align:center;color:#00838F">'+(r.stock>0.05?ctFmt(r.stock):'—')+'</td>'
+        +'<td style="padding:5px 3px;text-align:center;font-weight:900;font-size:13px;color:'+(r.order>0.05?'#00695C':'#B0BEC5')+'">'
+        +(r.order>0.05?ctFmt(r.order):'—')+'</td>'
+        +'</tr>';
+    }
+    h+='</tbody></table></div>'
+      +'<div style="display:flex;gap:6px;margin-top:12px">'
+      +'<button onclick="ctOrderWhatsApp()" style="flex:1;padding:11px;border:none;border-radius:9px;background:#25D366;color:#fff;font-weight:800;font-size:12px;cursor:pointer">💬 WhatsApp</button>'
+      +'<button onclick="ctOrderCopy()" style="flex:1;padding:11px;border:none;border-radius:9px;background:#455A64;color:#fff;font-weight:800;font-size:12px;cursor:pointer">📋 Copy</button>'
+      +'</div>';
+  }
+  return h;
+}
+
+function ctOrderText(){
+  var rows=ctOrderRows();
+  var d=new Date();d.setDate(d.getDate()+1);
+  var t='🛍️ ORDER — '+d.toISOString().split('T')[0]+'\n\n';
+  for(var i=0;i<rows.length;i++){
+    if(rows[i].order<0.05)continue;
+    t+=rows[i].icon+' '+rows[i].label+': '+ctFmt(rows[i].order)+' kg\n';
+  }
+  return t;
+}
+
+function ctOrderWhatsApp(){
+  var t=ctOrderText();
+  window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank');
+}
+
+function ctOrderCopy(){
+  var t=ctOrderText();
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(function(){showToast('✅ Copied');},function(){showToast('Copy failed');});
+  } else showToast('Copy not supported');
+}
+
+function ctOrderClear(){
+  if(!confirm('Clear order sheet?'))return;
+  CT_ORDER={};ctSaveOrder();render();showToast('Cleared');
+}
+
 
 // ---- Helper: average daily sales per product name ----
 function ctAvgSalesMap(days){

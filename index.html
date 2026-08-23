@@ -6089,7 +6089,7 @@ function ctCalcNeeds(nodes,map){
     var d=CT_DEMAND[n.id]||{};
     var need=parseFloat(d.need)||0;
     var stock=parseFloat(d.stock)||0;
-    var ownMissing=Math.max(0,need-stock);      // this node's own shortfall vs its own stock
+    var ownMissing=n.bone?0:Math.max(0,need-stock); // byproducts never force extra cutting
     var leftover=Math.max(0,stock-need);        // surplus of this node's stock after its own need
     var kidsNeedInN=0;                           // amount of THIS node needed (at fresh-cut basis) to satisfy kids
     for(var j=0;j<kids.length;j++){

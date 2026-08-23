@@ -5616,16 +5616,18 @@ function onWasteBlurSemi(p,el){
 // ===== CUTTING SYSTEM =====
 var CT_DEFAULT_TREE=[
  {id:'breast_wb',name:'BREAST WITH BONE',pct:40,kids:[
-   {id:'breast',name:'Breast',pct:75,final:true,kids:[]},
-   {id:'skin',name:'Skin',pct:13.46,final:true,kids:[]},
+   {id:'breast',name:'Breast',pct:73.08,final:true,kids:[]},
+   {id:'breast_bone',name:'Bone',pct:17.31,bone:true,kids:[]},
+   {id:'skin',name:'Skin',pct:7.69,final:true,kids:[]},
    {id:'minced',name:'Minced',pct:1.92,final:true,kids:[]}]},
  {id:'legs',name:'Whole Legs',pct:28.46,final:true,kids:[
    {id:'drum',name:'Drum',pct:43.24,final:true,kids:[]},
    {id:'thigh',name:'Thigh',pct:54.05,final:true,kids:[
      {id:'thigh_bl',name:'Thigh BL-SL',pct:70,final:true,kids:[]},
-     {id:'kashra',name:'Kashra',pct:30,final:true,kids:[]}]}]},
+     {id:'kashra',name:'Kashra',pct:30,final:true,kids:[]}]},
+   {id:'legs_trim',name:'Trim',pct:2.70,bone:true,kids:[]}]},
  {id:'wings',name:'Wings',pct:10.77,final:true,kids:[]},
- {id:'bone',name:'Bone',pct:27.69,bone:true,kids:[]}];
+ {id:'bone',name:'Bone',pct:20.77,bone:true,kids:[]}];
 
 var CT_TREE=(function(){try{var s=localStorage.getItem('ct_tree');return s?JSON.parse(s):JSON.parse(JSON.stringify(CT_DEFAULT_TREE));}catch(e){return JSON.parse(JSON.stringify(CT_DEFAULT_TREE));}})();
 var CT_ROOT_ID='__whole_chicken__';

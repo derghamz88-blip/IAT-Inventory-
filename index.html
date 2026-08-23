@@ -5751,21 +5751,23 @@ function ctEveningApply(){
     var node=flat[i].node;
     var prod=ctMatchProduct(node.name);
     if(!CT_DEMAND[node.id])CT_DEMAND[node.id]={need:'',stock:''};
-    if(prod&&avg[prod]>0)CT_DEMAND[node.id].need=(avg[prod]*mult).toFixed(1);
+    // Always overwrite: if there is no sales average for this product, clear it
+    // rather than leaving a stale value from a previous run.
+    CT_DEMAND[node.id].need=(prod&&avg[prod]>0)?(avg[prod]*mult).toFixed(1):'';
     // 2) stock straight from what the supervisor typed on this page
     var v=CT_ORDER['cut_'+node.id];
     CT_DEMAND[node.id].stock=(v===undefined||v==='')?'':String(parseFloat(normalizeNum(v))||0);
   }
   // whole chicken row: demand = whole chicken sales avg, stock = small weight count
   if(!CT_DEMAND[CT_ROOT_ID])CT_DEMAND[CT_ROOT_ID]={need:'',stock:''};
-  if(avg['Chicken']>0)CT_DEMAND[CT_ROOT_ID].need=(avg['Chicken']*mult).toFixed(1);
+  CT_DEMAND[CT_ROOT_ID].need=(avg['Chicken']>0)?(avg['Chicken']*mult).toFixed(1):'';
   CT_DEMAND[CT_ROOT_ID].stock=String(ctOrderNum('small_stock'));
   ctSaveDemand();
   // 3) needs for the order sheet itself
-  if(avg['Chicken']>0)CT_ORDER.small_need=avg['Chicken'].toFixed(1);
+  CT_ORDER.small_need=(avg['Chicken']>0)?avg['Chicken'].toFixed(1):'';
   for(var k=0;k<CT_OFFAL.length;k++){
     var p=CT_OFFAL[k][2];
-    if(avg[p]>0)CT_ORDER[CT_OFFAL[k][0]+'_need']=avg[p].toFixed(1);
+    CT_ORDER[CT_OFFAL[k][0]+'_need']=(avg[p]>0)?avg[p].toFixed(1):'';
   }
   ctSaveOrder();
   // 4) run the cutting plan, then take the raw-chicken-for-cutting figure

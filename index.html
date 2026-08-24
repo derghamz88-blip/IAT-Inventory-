@@ -5781,6 +5781,26 @@ function ctEveningApply(){
   showToast('✅ Calculated from evening count');
 }
 
+// Recalculate using whatever Need/Stock values are currently entered — does NOT
+// re-pull from Sales Avg, so manual edits are respected.
+function ctOrderRecalc(){
+  var flat=ctFlatten(CT_TREE);
+  for(var i=0;i<flat.length;i++){
+    var node=flat[i].node;
+    if(!CT_DEMAND[node.id])CT_DEMAND[node.id]={need:'',stock:''};
+    var v=CT_ORDER['cut_'+node.id];
+    CT_DEMAND[node.id].stock=(v===undefined||v==='')?'':String(parseFloat(normalizeNum(v))||0);
+  }
+  if(!CT_DEMAND[CT_ROOT_ID])CT_DEMAND[CT_ROOT_ID]={need:'',stock:''};
+  CT_DEMAND[CT_ROOT_ID].need=String(ctOrderNum('small_need'));
+  CT_DEMAND[CT_ROOT_ID].stock=String(ctOrderNum('small_stock'));
+  ctSaveDemand();
+  ctCalculate();
+  CT_ORDER.large_need=(CT_RESULT&&CT_RESULT.rawCut>0)?CT_RESULT.rawCut.toFixed(1):'0';
+  ctSaveOrder();
+  render();
+}
+
 function ctRenderOrder(){
   var rows=ctOrderRows();
   var h='<div style="background:#E0F7FA;border-radius:10px;padding:10px;margin-bottom:10px">'
@@ -5814,27 +5834,36 @@ function ctRenderOrder(){
     h+='<tr style="background:'+(a%2===0?'#F5FDFC':'#fff')+'">'
       +'<td style="padding:5px 6px;font-weight:700">'+raws[a][1]+' '+raws[a][2]+'</td>'
       +'<td style="padding:3px;width:90px"><input type="text" inputmode="decimal" value="'+(CT_ORDER[raws[a][0]+'_stock']||'')+'" placeholder="0 kg" '
-      +'oninput="ctSetOrder(\''+raws[a][0]+'_stock\',this.value)" '
+      +'oninput="ctSetOrder(\''+raws[a][0]+'_stock\',this.value)" onchange="ctOrderRecalc()" '
       +'style="width:100%;padding:6px;text-align:center;border:2px solid #A5D6A7;border-radius:6px;font-size:11px"></td>'
       +'</tr>';
   }
   h+='</table>';
 
   // --- Section 2: cut products ---
-  h+='<div style="font-size:11px;font-weight:800;color:#4A148C;margin:12px 0 5px">2️⃣ Cut products in stock</div>'
-    +'<table style="width:100%;border-collapse:collapse;font-size:11px">';
+  h+='<div style="font-size:11px;font-weight:800;color:#4A148C;margin:12px 0 5px">2️⃣ Cut products — demand &amp; stock</div>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:11px">'
+    +'<thead><tr style="background:#6A1B9A;color:#fff">'
+    +'<th style="padding:5px 6px;text-align:left">Product</th>'
+    +'<th style="padding:5px 3px;text-align:center;width:76px">Need</th>'
+    +'<th style="padding:5px 3px;text-align:center;width:76px">Stock</th>'
+    +'</tr></thead><tbody>';
   var flat=ctFlatten(CT_TREE);
   for(var i=0;i<flat.length;i++){
     var node=flat[i].node,dep=flat[i].depth||0;
+    var dd=CT_DEMAND[node.id]||{};
     h+='<tr style="background:'+(i%2===0?'#F8F5FA':'#fff')+'">'
       +'<td style="padding:5px 6px;padding-left:'+(6+dep*12)+'px;'+(node.bone?'color:#8D6E63;font-style:italic':'font-weight:600')+'">'
       +(dep>0?'&#8627; ':'')+node.name+'</td>'
-      +'<td style="padding:3px;width:90px"><input type="text" inputmode="decimal" value="'+(CT_ORDER['cut_'+node.id]||'')+'" placeholder="0 kg" '
-      +'oninput="ctSetOrder(\'cut_'+node.id+'\',this.value)" '
+      +'<td style="padding:3px"><input type="text" inputmode="decimal" value="'+(dd.need||'')+'" placeholder="0" '
+      +'oninput="ctSetDemand(\''+node.id+'\',\'need\',this.value)" onchange="ctOrderRecalc()" '
+      +'style="width:100%;padding:6px;text-align:center;border:2px solid #CE93D8;border-radius:6px;font-size:11px"></td>'
+      +'<td style="padding:3px"><input type="text" inputmode="decimal" value="'+(CT_ORDER['cut_'+node.id]||'')+'" placeholder="0" '
+      +'oninput="ctSetOrder(\'cut_'+node.id+'\',this.value)" onchange="ctOrderRecalc()" '
       +'style="width:100%;padding:6px;text-align:center;border:2px solid #A5D6A7;border-radius:6px;font-size:11px"></td>'
       +'</tr>';
   }
-  h+='</table>';
+  h+='</tbody></table>';
 
   // --- Section 3: offal ---
   h+='<div style="font-size:11px;font-weight:800;color:#4A148C;margin:12px 0 5px">3️⃣ Offal in stock (bought separately)</div>'
@@ -5843,7 +5872,7 @@ function ctRenderOrder(){
     h+='<tr style="background:'+(b%2===0?'#F5FDFC':'#fff')+'">'
       +'<td style="padding:5px 6px;font-weight:700">🫀 '+CT_OFFAL[b][1]+'</td>'
       +'<td style="padding:3px;width:90px"><input type="text" inputmode="decimal" value="'+(CT_ORDER[CT_OFFAL[b][0]+'_stock']||'')+'" placeholder="0 kg" '
-      +'oninput="ctSetOrder(\''+CT_OFFAL[b][0]+'_stock\',this.value)" '
+      +'oninput="ctSetOrder(\''+CT_OFFAL[b][0]+'_stock\',this.value)" onchange="ctOrderRecalc()" '
       +'style="width:100%;padding:6px;text-align:center;border:2px solid #A5D6A7;border-radius:6px;font-size:11px"></td>'
       +'</tr>';
   }
@@ -5870,7 +5899,9 @@ function ctRenderOrder(){
           +' &nbsp;('+CT_RESULT.drivers[0].name+' branch)</div>':'';
       h+='<tr style="background:'+(d%2===0?'#F5FDFC':'#fff')+'">'
         +'<td style="padding:5px 6px;font-weight:700">'+r.icon+' '+r.label+hint+'</td>'
-        +'<td style="padding:5px 3px;text-align:center;color:#455A64">'+(r.need>0.05?ctFmt(r.need):'—')+'</td>'
+        +'<td style="padding:3px"><input type="text" inputmode="decimal" value="'+(CT_ORDER[r.key+'_need']||'')+'" placeholder="0" '
+        +'oninput="ctSetOrder(\''+r.key+'_need\',this.value)" onchange="ctOrderRecalc()" '
+        +'style="width:100%;padding:5px;text-align:center;border:2px solid #4DD0E1;border-radius:6px;font-size:11px"></td>'
         +'<td style="padding:5px 3px;text-align:center;color:#00838F">'+(r.stock>0.05?ctFmt(r.stock):'—')+'</td>'
         +'<td style="padding:5px 3px;text-align:center;font-weight:900;font-size:13px;color:'+(r.order>0.05?'#00695C':'#B0BEC5')+'">'
         +(r.order>0.05?ctFmt(r.order):'—')+'</td>'

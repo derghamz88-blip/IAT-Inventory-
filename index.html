@@ -2701,12 +2701,19 @@ function renderSalesAvg(){
     });
   });
 
-  // Build rows: divide by total days in period (not just days with sales)
+  // Number of days that actually have a sales record (closed days excluded)
+  let actualDays=0;
+  Object.values(byDate).forEach(prods=>{
+    if(Object.values(prods).some(q=>q>0))actualDays++;
+  });
+  if(actualDays<1)actualDays=1;
+
+  // Build rows: divide by days that actually have sales, not the whole period
   const allProds=new Set([...Object.keys(totals),...Object.keys(todayItems)]);
   const rows=[...allProds].map(p=>({
     prod:p,
     todayQty:todayItems[p]||0,
-    avgQty:totals[p]?totals[p]/days:0,
+    avgQty:totals[p]?totals[p]/actualDays:0,
     daysCount:dayCounts[p]?dayCounts[p].size:0,
   })).filter(r=>r.todayQty>0||r.avgQty>0)
     .sort((a,b)=>b.todayQty-a.todayQty);
@@ -2737,7 +2744,7 @@ function renderSalesAvg(){
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
       <div style="font-size:10px;color:#78909C">Compare date:</div>
       <input type="date" class="fi" value="${S.salesAvgCompare||todayStr}" style="font-size:12px;padding:4px 8px" onchange="S.salesAvgCompare=this.value;render()">
-      <div style="font-size:10px;color:#78909C">Avg: ${days} days (${periodSales.length} records)</div>
+      <div style="font-size:10px;color:#78909C">Avg over ${actualDays} sales day${actualDays===1?'':'s'} (of ${days} in period)</div>
     </div>
     <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">
       <thead><tr style="background:#263238;color:#fff">
@@ -5959,8 +5966,17 @@ function ctAvgSalesMap(days){
   var byDate=getMergedSalesByDate(cutStr,todayStr);
   var tot={};
   for(var d in byDate){for(var p in byDate[d]){tot[p]=(tot[p]||0)+byDate[d][p];}}
+  // Divide by the number of days that actually have a sales record, not the whole
+  // period — closed days would otherwise drag the average down.
+  var actualDays=0;
+  for(var dk in byDate){
+    var hasSales=false;
+    for(var pk in byDate[dk]){if(byDate[dk][pk]>0){hasSales=true;break;}}
+    if(hasSales)actualDays++;
+  }
+  if(actualDays<1)actualDays=1;
   var avg={};
-  for(var p in tot){avg[p]=tot[p]/days;}
+  for(var p in tot){avg[p]=tot[p]/actualDays;}
   // Merge 500g child products into their parent (same as Sales Avg page's Comb KG).
   // getSalesQty already converts 500g pcs->kg once, so just add as-is here.
   var merged={};

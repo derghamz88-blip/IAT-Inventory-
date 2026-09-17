@@ -328,11 +328,12 @@ const TABS=[
   {key:'formulaA',     emoji:'🧮',ar:'Formula A',    color:'#4527A0',light:'#EDE7F6',border:'#B39DDB'},
   {key:'formulaB',     emoji:'🧮',ar:'Formula B',    color:'#00695C',light:'#E0F2F1',border:'#80CBC4'},
   {key:'diff',         emoji:'⚖️',ar:'Difference',   color:'#BF360C',light:'#FBE9E7',border:'#FFAB91'},
+  {key:'lossreport',   emoji:'📉',ar:'Loss Report',  color:'#4E342E',light:'#EFEBE9',border:'#D7CCC8'},
   {key:'cutting',      emoji:'🔪',ar:'Cutting',      color:'#6A1B9A',light:'#F3E5F5',border:'#CE93D8'},
   {key:'settings',     emoji:'⚙️',ar:'Settings',     color:'#455A64',light:'#ECEFF1',border:'#B0BEC5'},
 ];
 const TABS_R1=['inventory','receivables','returns','sales','daysales','salesavg','stocksummary','waste','production','frozen','orders'];
-const TABS_R2=['records','formulaA','formulaB','diff','cutting','settings'];
+const TABS_R2=['records','formulaA','formulaB','diff','lossreport','cutting','settings'];
 
 const TYPE_INFO={
   inventory:    {emoji:'📦',color:'#1565C0',label:'Inventory'},
@@ -585,6 +586,7 @@ function render(){
   else if(tab==='formulaA')     h+=renderFormula('a');
   else if(tab==='formulaB')     h+=renderFormula('b');
   else if(tab==='diff')         h+=renderDiff();
+  else if(tab==='lossreport')   h+=renderLossReport();
   else if(tab==='settings')     h+=renderSettings();
   else if(tab==='cutting')      h+=renderCuttingTab();
   h+='</div>';
@@ -2311,6 +2313,125 @@ function renderDiff(){
     </div>`;
   }
 
+  return h;
+}
+
+// ─── Loss Report (weight shrinkage between two inventory counts) ────────────────────────────────────
+function addDaysStr(dateStr,n){const d=new Date(dateStr+'T00:00:00');d.setDate(d.getDate()+n);return d.toISOString().split('T')[0];}
+function invExclKashra(rec){return combinedKg(rec)-getTotalKg(rec.items,'Kashra');}
+function sumRecsKg(arr,fromStr,toStr,fromIncl,toIncl){
+  // fromIncl/toIncl: true = inclusive bound
+  return(arr||[]).filter(r=>{
+    const okFrom=fromIncl?r.date>=fromStr:r.date>fromStr;
+    const okTo=toIncl?r.date<=toStr:r.date<toStr;
+    return okFrom&&okTo;
+  }).reduce((s,r)=>s+combinedKg(r),0);
+}
+function computeLossReport(startId,endId){
+  const s=D.inventories.find(r=>r.id===startId),e=D.inventories.find(r=>r.id===endId);
+  if(!s||!e)return null;
+  if(e.date<s.date)return{error:'End date must be on or after start date.'};
+  if(e.date===s.date)return{error:'Pick two different inventory dates.'};
+  const inv1=invExclKashra(s),inv2=invExclKashra(e);
+  // Receipts: start date (inclusive) → day before end date (inclusive)
+  const receipts=sumRecsKg(D.receivables,s.date,addDaysStr(e.date,-1),true,true);
+  // Kashra: sum of the Kashra field from every daily inventory record, day AFTER start → end date (inclusive)
+  const kashraRecs=(D.inventories||[]).filter(r=>r.date>s.date&&r.date<=e.date);
+  const kashraSum=kashraRecs.reduce((sum,r)=>sum+getTotalKg(r.items,'Kashra'),0);
+  const kashraDetail=kashraRecs.map(r=>({date:r.date,kg:getTotalKg(r.items,'Kashra')})).sort((a,b)=>a.date<b.date?-1:1);
+  // Waste: day after start → end date (inclusive)
+  const waste=sumRecsKg(D.waste,s.date,e.date,false,true);
+  // Sales: day after start → end date (inclusive), Sales preferred over Day Sales per date (no double count)
+  const byDate=getMergedSalesByDate(addDaysStr(s.date,1),e.date);
+  let salesMain=0;Object.values(byDate).forEach(prods=>{Object.values(prods).forEach(q=>salesMain+=q);});
+  // Day Sales recorded on the start date itself (same-day counter sales, added separately)
+  const startDaySales=(D.daySales||[]).filter(r=>r.date===s.date).reduce((sum,r)=>sum+combinedKg(r),0);
+  const salesTotal=salesMain+startDaySales;
+  const expected=inv1+receipts-kashraSum-waste-salesTotal;
+  const loss=expected-inv2;
+  return{
+    startDate:s.date,endDate:e.date,inv1,inv2,receipts,kashraSum,kashraDetail,waste,salesMain,startDaySales,salesTotal,expected,loss,
+    lossPctReceipts:receipts>0?(loss/receipts*100):null,
+    lossPctSales:salesTotal>0?(loss/salesTotal*100):null,
+  };
+}
+function renderLossReport(){
+  const invRecs=[...(D.inventories||[])].sort((a,b)=>a.date<b.date?1:-1); // newest first for picking
+  if(invRecs.length<2){
+    return`<div class="card"><h2 style="margin:0 0 6px;font-size:16px;color:#4E342E">📉 Loss Report</h2>
+    <div style="color:#90A4AE;font-size:12px">Need at least two saved Inventory records to compute a loss report.</div></div>`;
+  }
+  const startId=S.lossStartId||'',endId=S.lossEndId||'';
+  let h=`<div class="card" style="border:1.5px solid #D7CCC8">
+    <h2 style="margin:0 0 10px;font-size:16px;color:#4E342E">📉 Weight Loss Report</h2>
+    <div style="font-size:11px;color:#78909C;margin-bottom:10px">Reconciles opening stock + receipts against kashra, waste, sales and closing stock between two inventory counts.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+      <div style="flex:1;min-width:140px">
+        <div style="font-size:10px;color:#78909C;margin-bottom:2px">Start inventory</div>
+        <select class="fi" style="font-size:12px;padding:5px" onchange="S.lossStartId=this.value;render()">
+          <option value="">— choose —</option>
+          ${invRecs.map(r=>`<option value="${r.id}" ${startId===r.id?'selected':''}>${r.date}${r.notes?' — '+r.notes:''}</option>`).join('')}
+        </select>
+      </div>
+      <div style="flex:1;min-width:140px">
+        <div style="font-size:10px;color:#78909C;margin-bottom:2px">End inventory</div>
+        <select class="fi" style="font-size:12px;padding:5px" onchange="S.lossEndId=this.value;render()">
+          <option value="">— choose —</option>
+          ${invRecs.map(r=>`<option value="${r.id}" ${endId===r.id?'selected':''}>${r.date}${r.notes?' — '+r.notes:''}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+  </div>`;
+
+  if(!startId||!endId)return h;
+  const res=computeLossReport(startId,endId);
+  if(!res)return h+`<div class="card"><div style="color:#C62828;font-size:12px">⚠️ Could not load one of the selected inventory records.</div></div>`;
+  if(res.error)return h+`<div class="card"><div style="color:#C62828;font-size:12px">⚠️ ${res.error}</div></div>`;
+
+  const lossColor=res.loss>0?'#B71C1C':res.loss<0?'#2E7D32':'#546E7A';
+  const lossBg=res.loss>0?'#FFEBEE':res.loss<0?'#E8F5E9':'#ECEFF1';
+  const row=(label,val,sign)=>`<tr>
+      <td style="padding:6px 8px;font-size:11px;color:#37474F">${sign?`<span style="color:#90A4AE;margin-right:4px">${sign}</span>`:''}${label}</td>
+      <td style="padding:6px 8px;font-size:12px;font-weight:700;text-align:right;color:#263238">${val.toLocaleString(undefined,{maximumFractionDigits:1,minimumFractionDigits:1})}</td>
+    </tr>`;
+
+  h+=`<div class="card" style="margin-top:8px">
+    <div style="font-size:12px;font-weight:700;color:#4E342E;margin-bottom:8px">${res.startDate} → ${res.endDate}</div>
+    <div style="border-radius:9px;border:1px solid #ECEFF1;overflow:hidden">
+      <table style="border-collapse:collapse;width:100%">
+        <tbody>
+          ${row(`Opening inventory (${res.startDate}, excl. Kashra)`,res.inv1,'')}
+          ${row(`Receipts (${res.startDate} → ${addDaysStr(res.endDate,-1)})`,res.receipts,'+')}
+          ${row(`Kashra (${addDaysStr(res.startDate,1)} → ${res.endDate})`,res.kashraSum,'−')}
+          ${row(`Waste (${addDaysStr(res.startDate,1)} → ${res.endDate})`,res.waste,'−')}
+          ${row(`Sales (${addDaysStr(res.startDate,1)} → ${res.endDate})`,res.salesMain,'−')}
+          ${row(`Day Sales on ${res.startDate}`,res.startDaySales,'−')}
+          ${row(`Closing inventory (${res.endDate}, excl. Kashra)`,res.inv2,'−')}
+        </tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <div style="flex:1;min-width:140px;background:${lossBg};padding:10px 12px;border-radius:9px;text-align:center">
+        <div style="font-size:18px;font-weight:700;color:${lossColor}">${res.loss>=0?'':'−'}${Math.abs(res.loss).toLocaleString(undefined,{maximumFractionDigits:1,minimumFractionDigits:1})} kg</div>
+        <div style="font-size:9px;color:#78909C">${res.loss>0?'Weight Loss':res.loss<0?'Unexplained Surplus':'Balanced'}</div>
+      </div>
+      ${res.lossPctReceipts!==null?`<div style="flex:1;min-width:100px;background:#F5F5F5;padding:10px 12px;border-radius:9px;text-align:center">
+        <div style="font-size:15px;font-weight:700;color:#37474F">${res.lossPctReceipts.toFixed(2)}%</div>
+        <div style="font-size:9px;color:#78909C">of Receipts</div></div>`:''}
+      ${res.lossPctSales!==null?`<div style="flex:1;min-width:100px;background:#F5F5F5;padding:10px 12px;border-radius:9px;text-align:center">
+        <div style="font-size:15px;font-weight:700;color:#37474F">${res.lossPctSales.toFixed(2)}%</div>
+        <div style="font-size:9px;color:#78909C">of Sales</div></div>`:''}
+    </div>
+  </div>`;
+
+  if(res.kashraDetail.length){
+    h+=`<div class="card" style="margin-top:8px">
+      <div style="font-size:11px;font-weight:700;color:#4E342E;margin-bottom:6px">Kashra by day (${res.kashraDetail.length} record${res.kashraDetail.length===1?'':'s'})</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px">
+        ${res.kashraDetail.map(d=>`<div style="background:#EFEBE9;border-radius:7px;padding:4px 8px;font-size:10px;color:#4E342E">${d.date}: <b>${d.kg.toFixed(1)}</b></div>`).join('')}
+      </div>
+    </div>`;
+  }
   return h;
 }
 

@@ -2317,7 +2317,7 @@ function renderDiff(){
 }
 
 // ─── Loss Report (weight shrinkage between two inventory counts) ────────────────────────────────────
-function addDaysStr(dateStr,n){const d=new Date(dateStr+'T00:00:00');d.setDate(d.getDate()+n);return d.toISOString().split('T')[0];}
+function addDaysStr(dateStr,n){const[y,m,d]=dateStr.split('-').map(Number);const dt=new Date(Date.UTC(y,m-1,d));dt.setUTCDate(dt.getUTCDate()+n);return dt.toISOString().split('T')[0];}
 function invExclKashra(rec){return combinedKg(rec)-getTotalKg(rec.items,'Kashra');}
 function sumRecsKg(arr,fromStr,toStr,fromIncl,toIncl){
   // fromIncl/toIncl: true = inclusive bound

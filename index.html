@@ -2327,6 +2327,16 @@ function sumRecsKg(arr,fromStr,toStr,fromIncl,toIncl){
     return okFrom&&okTo;
   }).reduce((s,r)=>s+combinedKg(r),0);
 }
+// Frozen stock pulled into production (❄️ Frozen tab): each record's items are keyed by
+// FROZEN_PRODUCTS id -> carton count; kgFactor on that product is the fixed weight per carton.
+function frozenRecKg(r){return FROZEN_PRODUCTS.reduce((s,p)=>s+(parseFloat(r.items?.[p.id])||0)*p.kgFactor,0);}
+function sumFrozenKg(fromStr,toStr,fromIncl,toIncl){
+  return(D.frozen||[]).filter(r=>{
+    const okFrom=fromIncl?r.date>=fromStr:r.date>fromStr;
+    const okTo=toIncl?r.date<=toStr:r.date<toStr;
+    return okFrom&&okTo;
+  }).reduce((s,r)=>s+frozenRecKg(r),0);
+}
 function computeLossReport(startId,endId){
   const s=D.inventories.find(r=>r.id===startId),e=D.inventories.find(r=>r.id===endId);
   if(!s||!e)return null;
@@ -2335,6 +2345,9 @@ function computeLossReport(startId,endId){
   const inv1=invExclKashra(s),inv2=invExclKashra(e);
   // Receipts: start date (inclusive) → day before end date (inclusive)
   const receipts=sumRecsKg(D.receivables,s.date,addDaysStr(e.date,-1),true,true);
+  // Frozen stock used in production: same window as Receipts — it's another inbound source
+  // of raw material into production, just drawn from the freezer instead of a fresh purchase.
+  const frozenUsed=sumFrozenKg(s.date,addDaysStr(e.date,-1),true,true);
   // Kashra: sum of the Kashra field from every daily inventory record, day AFTER start → end date (inclusive)
   const kashraRecs=(D.inventories||[]).filter(r=>r.date>s.date&&r.date<=e.date);
   const kashraSum=kashraRecs.reduce((sum,r)=>sum+getTotalKg(r.items,'Kashra'),0);
@@ -2347,11 +2360,12 @@ function computeLossReport(startId,endId){
   // Day Sales recorded on the start date itself (same-day counter sales, added separately)
   const startDaySales=(D.daySales||[]).filter(r=>r.date===s.date).reduce((sum,r)=>sum+combinedKg(r),0);
   const salesTotal=salesMain+startDaySales;
-  const expected=inv1+receipts-kashraSum-waste-salesTotal;
+  const expected=inv1+receipts+frozenUsed-kashraSum-waste-salesTotal;
   const loss=expected-inv2;
+  const totalInbound=receipts+frozenUsed;
   return{
-    startDate:s.date,endDate:e.date,inv1,inv2,receipts,kashraSum,kashraDetail,waste,salesMain,startDaySales,salesTotal,expected,loss,
-    lossPctReceipts:receipts>0?(loss/receipts*100):null,
+    startDate:s.date,endDate:e.date,inv1,inv2,receipts,frozenUsed,kashraSum,kashraDetail,waste,salesMain,startDaySales,salesTotal,expected,loss,
+    lossPctReceipts:totalInbound>0?(loss/totalInbound*100):null,
     lossPctSales:salesTotal>0?(loss/salesTotal*100):null,
   };
 }
@@ -2364,7 +2378,7 @@ function renderLossReport(){
   const startId=S.lossStartId||'',endId=S.lossEndId||'';
   let h=`<div class="card" style="border:1.5px solid #D7CCC8">
     <h2 style="margin:0 0 10px;font-size:16px;color:#4E342E">📉 Weight Loss Report</h2>
-    <div style="font-size:11px;color:#78909C;margin-bottom:10px">Reconciles opening stock + receipts against kashra, waste, sales and closing stock between two inventory counts.</div>
+    <div style="font-size:11px;color:#78909C;margin-bottom:10px">Reconciles opening stock + receipts + frozen stock used against kashra, waste, sales and closing stock between two inventory counts.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px">
       <div style="flex:1;min-width:140px">
         <div style="font-size:10px;color:#78909C;margin-bottom:2px">Start inventory</div>
@@ -2402,6 +2416,7 @@ function renderLossReport(){
         <tbody>
           ${row(`Opening inventory (${res.startDate}, excl. Kashra)`,res.inv1,'')}
           ${row(`Receipts (${res.startDate} → ${addDaysStr(res.endDate,-1)})`,res.receipts,'+')}
+          ${row(`Frozen stock used (${res.startDate} → ${addDaysStr(res.endDate,-1)})`,res.frozenUsed,'+')}
           ${row(`Kashra (${addDaysStr(res.startDate,1)} → ${res.endDate})`,res.kashraSum,'−')}
           ${row(`Waste (${addDaysStr(res.startDate,1)} → ${res.endDate})`,res.waste,'−')}
           ${row(`Sales (${addDaysStr(res.startDate,1)} → ${res.endDate})`,res.salesMain,'−')}
@@ -2417,7 +2432,7 @@ function renderLossReport(){
       </div>
       ${res.lossPctReceipts!==null?`<div style="flex:1;min-width:100px;background:#F5F5F5;padding:10px 12px;border-radius:9px;text-align:center">
         <div style="font-size:15px;font-weight:700;color:#37474F">${res.lossPctReceipts.toFixed(2)}%</div>
-        <div style="font-size:9px;color:#78909C">of Receipts</div></div>`:''}
+        <div style="font-size:9px;color:#78909C">of Total Inbound</div></div>`:''}
       ${res.lossPctSales!==null?`<div style="flex:1;min-width:100px;background:#F5F5F5;padding:10px 12px;border-radius:9px;text-align:center">
         <div style="font-size:15px;font-weight:700;color:#37474F">${res.lossPctSales.toFixed(2)}%</div>
         <div style="font-size:9px;color:#78909C">of Sales</div></div>`:''}

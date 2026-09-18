@@ -329,11 +329,12 @@ const TABS=[
   {key:'formulaB',     emoji:'🧮',ar:'Formula B',    color:'#00695C',light:'#E0F2F1',border:'#80CBC4'},
   {key:'diff',         emoji:'⚖️',ar:'Difference',   color:'#BF360C',light:'#FBE9E7',border:'#FFAB91'},
   {key:'lossreport',   emoji:'📉',ar:'Loss Report',  color:'#4E342E',light:'#EFEBE9',border:'#D7CCC8'},
+  {key:'frozenusage',  emoji:'🧊',ar:'Frozen Usage', color:'#00838F',light:'#E0F7FA',border:'#4DD0E1'},
   {key:'cutting',      emoji:'🔪',ar:'Cutting',      color:'#6A1B9A',light:'#F3E5F5',border:'#CE93D8'},
   {key:'settings',     emoji:'⚙️',ar:'Settings',     color:'#455A64',light:'#ECEFF1',border:'#B0BEC5'},
 ];
 const TABS_R1=['inventory','receivables','returns','sales','daysales','salesavg','stocksummary','waste','production','frozen','orders'];
-const TABS_R2=['records','formulaA','formulaB','diff','lossreport','cutting','settings'];
+const TABS_R2=['records','formulaA','formulaB','diff','lossreport','frozenusage','cutting','settings'];
 
 const TYPE_INFO={
   inventory:    {emoji:'📦',color:'#1565C0',label:'Inventory'},
@@ -348,7 +349,7 @@ const TYPE_INFO={
 
 
 // ═══ STORAGE KEYS ═══════════════════════════════════
-const SK='chk-inv-v3',SK_P='chk-prods-v1',SK_M='chk-map-v1',SK_SM='chk-stk-v1',SK_FA='chk-fa-v1',SK_FB='chk-fb-v1',SK_NWC='chk-nwc-types',SK_FP='chk-frozen-prods-v1';
+const SK='chk-inv-v3',SK_P='chk-prods-v1',SK_M='chk-map-v1',SK_SM='chk-stk-v1',SK_FA='chk-fa-v1',SK_FB='chk-fb-v1',SK_NWC='chk-nwc-types',SK_FP='chk-frozen-prods-v1',SK_FUP='chk-frozen-usage-prods-v1';
 
 // ═══ DYNAMIC PRODUCTS ═══════════════════════════════
 let PRODUCTS=[],PARENT_PRODUCTS=[],C_MAP={};
@@ -379,14 +380,14 @@ let S={tab:'inventory',view:'list',record:null,search:'',expanded:new Set(),
        listFrom:'',listTo:'',gFrom:'',gTo:'',
        faShowDetail:false,fbShowDetail:false,diffShowDetail:false,
        _prodNWC:{}}; // per-product NWC batches
-let D={inventories:[],receivables:[],returns:[],sales:[],daySales:[],stockSummaries:[],waste:[],production:[],frozen:[],orders:[]};
+let D={inventories:[],receivables:[],returns:[],sales:[],daySales:[],stockSummaries:[],waste:[],production:[],frozen:[],orders:[],frozenUsage:[]};
 let FA=[],FB=[];
 let UP ={step:'upload',fileName:'',date:'',rows:[],converted:{},unmatched:[]};
 let UPD={step:'upload',fileName:'',date:'',rows:[],converted:{},unmatched:[]};
 let UPS={step:'upload',fileName:'',date:'',rows:[],converted:{},unmatched:[]};
 
 function load(){
-  try{const s=localStorage.getItem(SK);if(s){const d=JSON.parse(s);D={inventories:d.inventories||[],receivables:d.receivables||[],returns:d.returns||[],sales:d.sales||[],daySales:d.daySales||[],stockSummaries:d.stockSummaries||[],waste:d.waste||[],production:d.production||[],frozen:d.frozen||[],orders:d.orders||[]};}}
+  try{const s=localStorage.getItem(SK);if(s){const d=JSON.parse(s);D={inventories:d.inventories||[],receivables:d.receivables||[],returns:d.returns||[],sales:d.sales||[],daySales:d.daySales||[],stockSummaries:d.stockSummaries||[],waste:d.waste||[],production:d.production||[],frozen:d.frozen||[],orders:d.orders||[],frozenUsage:d.frozenUsage||[]};}}
   catch(e){}
 }
 function save(){
@@ -403,6 +404,7 @@ function emptyItems(){const o={};PRODUCTS.forEach(p=>o[p]={kg:'',pcs:''});return
 function newRec(){return{id:gid(),date:new Date().toISOString().split('T')[0],notes:'',items:emptyItems()};}
 function dk(t){
   if(t==='frozen')return'frozen';
+  if(t==='frozenusage')return'frozenUsage';
   if(t==='inventory')return'inventories';
   if(t==='receivables')return'receivables';
   if(t==='returns')return'returns';
@@ -587,6 +589,7 @@ function render(){
   else if(tab==='formulaB')     h+=renderFormula('b');
   else if(tab==='diff')         h+=renderDiff();
   else if(tab==='lossreport')   h+=renderLossReport();
+  else if(tab==='frozenusage')  h+=view==='form'?renderFrozenUsageForm():renderFrozenUsageTab();
   else if(tab==='settings')     h+=renderSettings();
   else if(tab==='cutting')      h+=renderCuttingTab();
   h+='</div>';
@@ -2327,15 +2330,12 @@ function sumRecsKg(arr,fromStr,toStr,fromIncl,toIncl){
     return okFrom&&okTo;
   }).reduce((s,r)=>s+combinedKg(r),0);
 }
-// Frozen stock pulled into production (❄️ Frozen tab): each record's items are keyed by
-// FROZEN_PRODUCTS id -> carton count; kgFactor on that product is the fixed weight per carton.
-function frozenRecKg(r){return FROZEN_PRODUCTS.reduce((s,p)=>s+(parseFloat(r.items?.[p.id])||0)*p.kgFactor,0);}
-function sumFrozenKg(fromStr,toStr,fromIncl,toIncl){
-  return(D.frozen||[]).filter(r=>{
+function sumFrozenUsageKg(fromStr,toStr,fromIncl,toIncl){
+  return(D.frozenUsage||[]).filter(r=>{
     const okFrom=fromIncl?r.date>=fromStr:r.date>fromStr;
     const okTo=toIncl?r.date<=toStr:r.date<toStr;
     return okFrom&&okTo;
-  }).reduce((s,r)=>s+frozenRecKg(r),0);
+  }).reduce((s,r)=>s+frozenUsageRecKg(r),0);
 }
 function computeLossReport(startId,endId){
   const s=D.inventories.find(r=>r.id===startId),e=D.inventories.find(r=>r.id===endId);
@@ -2345,9 +2345,10 @@ function computeLossReport(startId,endId){
   const inv1=invExclKashra(s),inv2=invExclKashra(e);
   // Receipts: start date (inclusive) → day before end date (inclusive)
   const receipts=sumRecsKg(D.receivables,s.date,addDaysStr(e.date,-1),true,true);
-  // Frozen stock used in production: same window as Receipts — it's another inbound source
-  // of raw material into production, just drawn from the freezer instead of a fresh purchase.
-  const frozenUsed=sumFrozenKg(s.date,addDaysStr(e.date,-1),true,true);
+  // Frozen stock used in production (🧊 Frozen Usage tab, user-logged day by day): same window
+  // and same inclusive/exclusive rule as Receipts — it's another inbound source of raw material
+  // into production, just drawn from the freezer instead of a fresh purchase.
+  const frozenUsed=sumFrozenUsageKg(s.date,addDaysStr(e.date,-1),true,true);
   // Kashra: sum of the Kashra field from every daily inventory record, day AFTER start → end date (inclusive)
   const kashraRecs=(D.inventories||[]).filter(r=>r.date>s.date&&r.date<=e.date);
   const kashraSum=kashraRecs.reduce((sum,r)=>sum+getTotalKg(r.items,'Kashra'),0);
@@ -2425,6 +2426,9 @@ function renderLossReport(){
         </tbody>
       </table>
     </div>
+    <div style="text-align:right;margin-top:4px">
+      <button onclick="S.tab='frozenusage';S.view='list';render()" style="border:none;background:none;color:#00838F;font-size:10px;text-decoration:underline;cursor:pointer">🧊 View/edit Frozen Usage log</button>
+    </div>
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
       <div style="flex:1;min-width:140px;background:${lossBg};padding:10px 12px;border-radius:9px;text-align:center">
         <div style="font-size:18px;font-weight:700;color:${lossColor}">${res.loss>=0?'':'−'}${Math.abs(res.loss).toLocaleString(undefined,{maximumFractionDigits:1,minimumFractionDigits:1})} kg</div>
@@ -2461,11 +2465,12 @@ function renderSettings(){
       <button class="stb${S.stab==='sh'?' on':''}" onclick="S.stab='sh';render()">🏭 Slaughterhouses (${SH_DATA.length})</button>
       <button class="stb${S.stab==='rp'?' on':''}" onclick="S.stab='rp';render()">✂️ Cut Products (${RP_DATA.length})</button>
       <button class="stb${S.stab==='frozen'?' on':''}" onclick="S.stab='frozen';render()">❄️ Frozen Products (${FROZEN_PRODUCTS.length})</button>
+      <button class="stb${S.stab==='frozenusage'?' on':''}" onclick="S.stab='frozenusage';render()">🧊 Frozen Usage Products (${FROZEN_USAGE_PRODUCTS.length})</button>
       <button class="stb${S.stab==='nwctypes'?' on':''}" onclick="S.stab='nwctypes';render()">⚖️ Containers (${NWC_TYPES.filter(t=>t.key!=='custom').length})</button>
       <button class="stb${S.stab==='api'?' on':''}" onclick="S.stab='api';render()">🔑 API Key</button>
     </div>
   </div>
-  ${S.stab==='products'?renderSettingsProds():S.stab==='mapping'?renderSettingsMap():S.stab==='stockmap'?renderSettingsStockMap():S.stab==='sh'?renderSettingsSH():S.stab==='rp'?renderSettingsRP():S.stab==='nwctypes'?renderSettingsNWC():S.stab==='frozen'?renderFrozenSettings():renderSettingsAPI()}`;
+  ${S.stab==='products'?renderSettingsProds():S.stab==='mapping'?renderSettingsMap():S.stab==='stockmap'?renderSettingsStockMap():S.stab==='sh'?renderSettingsSH():S.stab==='rp'?renderSettingsRP():S.stab==='nwctypes'?renderSettingsNWC():S.stab==='frozen'?renderFrozenSettings():S.stab==='frozenusage'?renderFrozenUsageSettings():renderSettingsAPI()}`;
 }
 function renderSettingsNWC(){
   const editable=NWC_TYPES.filter(t=>t.key!=='custom');
@@ -3058,8 +3063,8 @@ function formatDateShort(d){const[y,m,day]=d.split('-');return`${day}/${m}/${y}`
 
 function startNew(){
   let r;
-  if(S.tab==='frozen'){
-    // Frozen uses its own empty items (just numeric values by product ID)
+  if(S.tab==='frozen'||S.tab==='frozenusage'){
+    // Frozen / Frozen Usage use their own empty items (just numeric values by product ID)
     r={id:gid(),date:new Date().toISOString().split('T')[0],notes:'',items:{}};
   } else {
     r=newRec();
@@ -3095,8 +3100,8 @@ function editRec(id){
     }
     S.view='receipt';render();return;
   }
-  // Frozen: keep items as-is (numeric values), others: expand
-  const recItems=S.tab==='frozen'?{...(r.items||{})}:expandItems(r.items);
+  // Frozen / Frozen Usage: keep items as-is (numeric values), others: expand
+  const recItems=(S.tab==='frozen'||S.tab==='frozenusage')?{...(r.items||{})}:expandItems(r.items);
   S.record={...JSON.parse(JSON.stringify(r)),items:recItems};
   // Restore NWC rows from saved _nwc in record
   S._prodNWC={};
@@ -3112,9 +3117,9 @@ function delRec(id){if(!confirm('Delete?'))return;D[dk(S.tab)]=D[dk(S.tab)].filt
 function toggleCard(id){S.expanded.has(id)?S.expanded.delete(id):S.expanded.add(id);render();}
 function saveRec(){
   const r=S.record;if(!r.date){alert('Please select a date!');return;}
-  if(S.tab!=='frozen')r.items=compactItems(r.items);
+  if(S.tab!=='frozen'&&S.tab!=='frozenusage')r.items=compactItems(r.items);
   else{
-    // Frozen: compact by removing zero/empty values
+    // Frozen / Frozen Usage: compact by removing zero/empty values
     const c={};
     Object.entries(r.items||{}).forEach(([k,v])=>{if(parseFloat(v)>0)c[k]=v;});
     r.items=c;
@@ -3468,6 +3473,16 @@ let FROZEN_PRODUCTS=[
 function loadFrozenProducts(){try{const s=localStorage.getItem(SK_FP);if(s)FROZEN_PRODUCTS=JSON.parse(s);}catch(e){}}
 function saveFrozenProducts(){try{localStorage.setItem(SK_FP,JSON.stringify(FROZEN_PRODUCTS));_scheduleSave();}catch(e){}}
 
+// ─── Frozen Usage products (🧊 stock pulled from the freezer into production — a separate,
+// user-maintained log distinct from the ❄️ Frozen tab above) ──────────────────────────────
+// Each product: {id, name, unit, kgFactor} — same shape as FROZEN_PRODUCTS, own list so it
+// doesn't get mixed up with the (largely unused) Frozen tab data.
+let FROZEN_USAGE_PRODUCTS=[
+  {id:1,name:'Thigh BL-SL',unit:'CTN',kgFactor:12},
+];
+function loadFrozenUsageProducts(){try{const s=localStorage.getItem(SK_FUP);if(s)FROZEN_USAGE_PRODUCTS=JSON.parse(s);}catch(e){}}
+function saveFrozenUsageProducts(){try{localStorage.setItem(SK_FUP,JSON.stringify(FROZEN_USAGE_PRODUCTS));_scheduleSave();}catch(e){}}
+
 // ─── Frozen Tab Render ────────────────────────────
 // ══ OneDrive for Orders Total ══
 let _msalApp=null;
@@ -3741,6 +3756,190 @@ function renderFrozenForm(){
         <td id="frz-kg-${p.id}" style="padding:3px 4px;text-align:center;font-weight:700;color:${hasVal?inf.color:'#CFD8DC'}">${hasVal?kg.toFixed(2):'—'}</td>
       </tr>`;
     }).join('')}
+    </tbody></table>
+  </div>`;
+}
+
+// ─── Frozen Usage (🧊 stock pulled from the freezer into production, logged day by day by
+// the user; feeds into the Loss Report the same way Receipts do) ────────────────────────
+function renderFrozenUsageTab(){
+  const inf=ti('frozenusage');
+  if(S.view==='form')return renderFrozenUsageForm();
+  const recs=[...(D.frozenUsage||[])].sort((a,b)=>b.date.localeCompare(a.date));
+  const grandKg=recs.reduce((s,r)=>s+frozenUsageRecKg(r),0);
+  let h=`<div class="card" style="border:1.5px solid ${inf.border}">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div>
+        <h2 style="margin:0;font-size:16px;color:${inf.color}">🧊 Frozen Usage</h2>
+        <div style="font-size:11px;color:#78909C">${recs.length} record(s) · ${grandKg.toFixed(1)} kg total</div>
+      </div>
+      <button class="btn" style="background:${inf.color};color:#fff;padding:7px 16px" onclick="startNew()">+ New Entry</button>
+    </div>
+    <div style="font-size:11px;color:#78909C">Log the frozen stock (by carton) you pull into production each day — this feeds the Loss Report as an inbound amount, same as Receipts.</div>
+  </div>`;
+  if(!recs.length){
+    h+=`<div class="card" style="text-align:center;color:#90A4AE;font-size:12px;padding:24px">No entries yet. Tap "+ New Entry" to log today's usage.</div>`;
+    return h;
+  }
+  recs.forEach(r=>h+=renderFrozenUsageCard(r,inf));
+  return h;
+}
+function frozenUsageRecKg(r){return FROZEN_USAGE_PRODUCTS.reduce((s,p)=>s+(parseFloat(r.items?.[p.id])||0)*p.kgFactor,0);}
+function renderFrozenUsageCard(r,inf){
+  const totalKg=frozenUsageRecKg(r);
+  const prods=FROZEN_USAGE_PRODUCTS.filter(p=>parseFloat(r.items?.[p.id])>0).length;
+  const exp=S.expanded.has(r.id);
+  return`<div class="card" style="border:1.5px solid ${inf.border};margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-weight:700;color:${inf.color};font-size:13px">${r.date}</div>
+        ${r.notes?`<div style="font-size:11px;color:#78909C">${r.notes}</div>`:''}
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <div style="text-align:right">
+          <div style="font-weight:800;color:${inf.color};font-size:14px">${totalKg.toFixed(2)} <small style="font-size:10px">KG</small></div>
+          <div style="font-size:10px;color:#78909C">${prods} product${prods===1?'':'s'}</div>
+        </div>
+        <button onclick="toggleCard('${r.id}')" style="border:none;background:${inf.color};color:#fff;border-radius:7px;width:32px;height:32px;cursor:pointer;font-size:13px">${exp?'▲':'▼'}</button>
+        <button onclick="editRec('${r.id}')" style="border:none;background:#FFF8E1;color:#F57F17;border-radius:7px;width:32px;height:32px;cursor:pointer;font-size:14px">✏️</button>
+        <button onclick="delRec('${r.id}')" style="border:none;background:#FFEBEE;color:#C62828;border-radius:7px;width:32px;height:32px;cursor:pointer;font-size:14px">♻️</button>
+      </div>
+    </div>
+    ${exp?renderFrozenUsageCardDetail(r,inf):''}
+  </div>`;
+}
+function renderFrozenUsageCardDetail(r,inf){
+  const rows=FROZEN_USAGE_PRODUCTS.filter(p=>parseFloat(r.items?.[p.id])>0);
+  if(!rows.length)return'<div style="color:#90A4AE;font-size:11px;padding:8px">No items</div>';
+  return`<div style="margin-top:8px;border-top:1px solid ${inf.border};padding-top:8px">
+    <table style="width:100%;border-collapse:collapse;font-size:11px">
+      <thead><tr style="background:#263238;color:#fff">
+        <th style="padding:4px 6px;text-align:left">Product</th>
+        <th style="padding:4px 6px;text-align:center">Qty</th>
+        <th style="padding:4px 6px;text-align:center">Unit</th>
+        <th style="padding:4px 6px;text-align:center">KG</th>
+      </tr></thead><tbody>
+    ${rows.map((p,i)=>{
+      const qty=parseFloat(r.items?.[p.id])||0;
+      const kg=qty*p.kgFactor;
+      return`<tr style="background:${i%2===0?'#fff':'#F5F5F5'}">
+        <td style="padding:4px 6px">${p.name}</td>
+        <td style="padding:4px 6px;text-align:center">${qty}</td>
+        <td style="padding:4px 6px;text-align:center">${p.unit}</td>
+        <td style="padding:4px 6px;text-align:center;font-weight:700">${kg.toFixed(2)}</td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>
+  </div>`;
+}
+function renderFrozenUsageForm(){
+  const inf=ti('frozenusage');
+  const r=S.record;
+  const totalKg=frozenUsageRecKg(r);
+  const prods=FROZEN_USAGE_PRODUCTS.filter(p=>parseFloat(r.items?.[p.id])>0).length;
+  return`<div class="card" style="border:1.5px solid ${inf.border}">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+      <h2 style="margin:0;font-size:15px;color:${inf.color};flex:1">🧊 ${r.id?'Edit':'New'} Frozen Usage</h2>
+      <button class="btn" style="background:#ECEFF1;color:#546E7A" onclick="cancelForm()">← Back</button>
+      <button class="btn" style="background:${inf.color};color:#fff;padding:7px 15px" onclick="saveRec()">💾 Save</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <div style="flex:1">
+        <div style="font-size:10px;color:#78909C;margin-bottom:3px">📅 Date</div>
+        <input type="date" value="${r.date||''}" oninput="S.record.date=this.value;saveDraft()"
+          style="width:100%;padding:8px;border:1.5px solid #E0E0E0;border-radius:8px;font-size:13px">
+      </div>
+      <div style="flex:2">
+        <div style="font-size:10px;color:#78909C;margin-bottom:3px">📝 Notes</div>
+        <input type="text" value="${r.notes||''}" placeholder="Notes..." oninput="S.record.notes=this.value;saveDraft()"
+          style="width:100%;padding:8px;border:1.5px solid #E0E0E0;border-radius:8px;font-size:13px">
+      </div>
+    </div>
+    <div style="background:#E0F7FA;border-radius:8px;padding:8px 12px;margin-bottom:12px;display:flex;gap:16px">
+      <div><span style="font-size:11px;color:#00838F">Total KG:</span> <strong id="fzu-total-kg" style="color:${inf.color};font-size:14px">${totalKg.toFixed(2)}</strong></div>
+      <div><span style="font-size:11px;color:#00838F">Products:</span> <strong id="fzu-total-prods" style="color:${inf.color}">${prods}</strong></div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px">
+      <thead><tr style="background:#263238;color:#fff">
+        <th style="padding:4px 6px;text-align:left">Product</th>
+        <th style="padding:4px 4px;text-align:center;width:70px">Qty</th>
+        <th style="padding:4px 4px;text-align:center;width:40px">Unit</th>
+        <th style="padding:4px 4px;text-align:center;width:55px">KG</th>
+      </tr></thead><tbody>
+    ${FROZEN_USAGE_PRODUCTS.map((p,i)=>{
+      const qty=parseFloat(r.items?.[p.id])||0;
+      const kg=qty*p.kgFactor;
+      const hasVal=qty>0;
+      return`<tr id="fzu-row-${p.id}" style="background:${hasVal?inf.light:i%2===0?'#fff':'#FAFAFA'};border-bottom:1px solid #EFEFEF">
+        <td style="padding:3px 6px;font-weight:${hasVal?700:400};color:${hasVal?inf.color:'#455A64'};font-size:10px">${p.name} <span style="color:#90A4AE;font-weight:400">(${p.kgFactor}kg/${p.unit})</span></td>
+        <td style="padding:2px 3px"><input type="text" inputmode="decimal" value="${qty||''}" placeholder="0"
+          style="width:100%;text-align:center;border:1.5px solid ${hasVal?'#4DD0E1':'#E0E0E0'};border-radius:5px;font-size:11px;padding:3px;background:${hasVal?'#E0F7FA':'#fff'};font-family:inherit"
+          oninput="if(!S.record.items)S.record.items={};S.record.items[${p.id}]=normalizeNum(this.value);_updateFrozenUsageTotals()" enterkeyhint="next"
+          onblur="if(!S.record.items)S.record.items={};S.record.items[${p.id}]=normalizeNum(this.value);_updateFrozenUsageTotals();saveDraft()"></td>
+        <td style="padding:3px 4px;text-align:center;color:#00838F;font-weight:600">${p.unit}</td>
+        <td id="fzu-kg-${p.id}" style="padding:3px 4px;text-align:center;font-weight:700;color:${hasVal?inf.color:'#CFD8DC'}">${hasVal?kg.toFixed(2):'—'}</td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>
+    <div style="margin-top:10px;text-align:right">
+      <button onclick="S.stab='frozenusage';S.tab='settings';S.view='list';render()" style="border:none;background:none;color:#00838F;font-size:11px;text-decoration:underline;cursor:pointer">⚙️ Manage product list (carton weights)</button>
+    </div>
+  </div>`;
+}
+function _updateFrozenUsageTotals(){
+  if(!S.record||S.tab!=='frozenusage')return;
+  const totalKg=frozenUsageRecKg(S.record);
+  const prods=FROZEN_USAGE_PRODUCTS.filter(p=>parseFloat(S.record.items?.[p.id])>0).length;
+  const kgEl=document.getElementById('fzu-total-kg');
+  const prEl=document.getElementById('fzu-total-prods');
+  if(kgEl)kgEl.textContent=totalKg.toFixed(2);
+  if(prEl)prEl.textContent=prods;
+  FROZEN_USAGE_PRODUCTS.forEach(p=>{
+    const qty=parseFloat(S.record.items?.[p.id])||0;
+    const row=document.getElementById('fzu-row-'+p.id);
+    if(row){
+      const inf=ti('frozenusage');
+      row.style.background=qty>0?inf.light:(FROZEN_USAGE_PRODUCTS.indexOf(p)%2===0?'#fff':'#FAFAFA');
+    }
+    const kgEl2=document.getElementById('fzu-kg-'+p.id);
+    if(kgEl2){
+      const kg=qty*p.kgFactor;
+      kgEl2.textContent=qty>0?kg.toFixed(2):'—';
+      kgEl2.style.color=qty>0?ti('frozenusage').color:'#CFD8DC';
+    }
+  });
+}
+function addFrozenUsageProduct(){
+  const name=prompt('Product name:');if(!name)return;
+  const unit=prompt('Unit (CTN/KG/PCS):','CTN')||'CTN';
+  const kgFactor=parseFloat(prompt('KG per unit (carton weight):','12'))||12;
+  FROZEN_USAGE_PRODUCTS.push({id:Date.now(),name,unit,kgFactor});
+  saveFrozenUsageProducts();render();
+}
+function renderFrozenUsageSettings(){
+  return`<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:700;color:#00838F">🧊 Frozen Usage Products (${FROZEN_USAGE_PRODUCTS.length})</div>
+      <button class="btn" style="background:#00838F;color:#fff;padding:6px 12px;font-size:12px" onclick="addFrozenUsageProduct()">+ Add</button>
+    </div>
+    <div style="font-size:11px;color:#78909C;margin-bottom:10px">Each product's "KG per unit" is the fixed carton weight used to auto-calculate totals in the 🧊 Frozen Usage tab and the Loss Report.</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px">
+      <thead><tr style="background:#263238;color:#fff">
+        <th style="padding:5px 6px;text-align:left">Name</th>
+        <th style="padding:5px 4px;text-align:center;width:60px">Unit</th>
+        <th style="padding:5px 4px;text-align:center;width:70px">KG/unit</th>
+        <th style="padding:5px 4px;text-align:center;width:36px"></th>
+      </tr></thead><tbody>
+    ${FROZEN_USAGE_PRODUCTS.map((p,i)=>`<tr style="background:${i%2===0?'#fff':'#F5F5F5'};border-bottom:1px solid #EFEFEF">
+        <td style="padding:2px 3px"><input type="text" value="${p.name}" style="width:100%;border:1px solid #E0E0E0;border-radius:5px;padding:3px;font-size:11px"
+          onchange="FROZEN_USAGE_PRODUCTS[${i}].name=this.value;saveFrozenUsageProducts()"></td>
+        <td style="padding:2px 3px"><input type="text" value="${p.unit}" style="width:100%;text-align:center;border:1px solid #E0E0E0;border-radius:5px;padding:3px;font-size:11px"
+          onchange="FROZEN_USAGE_PRODUCTS[${i}].unit=this.value;saveFrozenUsageProducts()"></td>
+        <td style="padding:2px 3px"><input type="text" inputmode="decimal" value="${p.kgFactor}" style="width:100%;text-align:center;border:1px solid #E0E0E0;border-radius:5px;padding:3px;font-size:11px"
+          onchange="FROZEN_USAGE_PRODUCTS[${i}].kgFactor=parseFloat(this.value)||1;saveFrozenUsageProducts()"></td>
+        <td style="padding:2px 3px;text-align:center"><button onclick="FROZEN_USAGE_PRODUCTS.splice(${i},1);saveFrozenUsageProducts();render()"
+          style="border:none;background:#FFEBEE;color:#C62828;border-radius:5px;width:26px;height:26px;cursor:pointer">✕</button></td>
+      </tr>`).join('')}
     </tbody></table>
   </div>`;
 }
@@ -5088,7 +5287,7 @@ function saveAndOpenOneDrive(){
   },800);
 }
 function exportData(){
-  const data={version:4,exportDate:new Date().toISOString(),PRODUCTS,MD,SMD,SH_DATA,D,FA,FB,FROZEN_PRODUCTS,NWC_TYPES,RP_DATA};
+  const data={version:4,exportDate:new Date().toISOString(),PRODUCTS,MD,SMD,SH_DATA,D,FA,FB,FROZEN_PRODUCTS,FROZEN_USAGE_PRODUCTS,NWC_TYPES,RP_DATA};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const fname='chicken-inventory-'+new Date().toISOString().split('T')[0]+'.json';
@@ -5267,10 +5466,12 @@ function applyBackup(data){
   if(data.MD){MD=data.MD;saveMapping();}
   if(data.SMD){SMD=data.SMD;saveStockMapping();}
   if(data.SH_DATA){SH_DATA=data.SH_DATA;saveSH();}
-  if(data.D){D={inventories:[],receivables:[],returns:[],sales:[],daySales:[],stockSummaries:[],waste:[],production:[],frozen:[],...data.D};
+  if(data.D){D={inventories:[],receivables:[],returns:[],sales:[],daySales:[],stockSummaries:[],waste:[],production:[],frozen:[],orders:[],frozenUsage:[],...data.D};
     if(!D.frozen)D.frozen=[]; // ensure frozen exists even from old backups
+    if(!D.frozenUsage)D.frozenUsage=[]; // ensure frozenUsage exists even from old backups
     save();}
   if(data.FROZEN_PRODUCTS&&data.FROZEN_PRODUCTS.length){FROZEN_PRODUCTS=data.FROZEN_PRODUCTS;saveFrozenProducts();}
+  if(data.FROZEN_USAGE_PRODUCTS&&data.FROZEN_USAGE_PRODUCTS.length){FROZEN_USAGE_PRODUCTS=data.FROZEN_USAGE_PRODUCTS;saveFrozenUsageProducts();}
   if(data.NWC_TYPES&&data.NWC_TYPES.length){NWC_TYPES=data.NWC_TYPES;saveNWCTypes();}
   if(data.RP_DATA){RP_DATA=data.RP_DATA;saveRP();}
   FA=data.FA||[];FB=data.FB||[];
@@ -5278,7 +5479,7 @@ function applyBackup(data){
 }
 
 function getBackupData(){
-  return JSON.stringify({version:4,exportDate:new Date().toISOString(),PRODUCTS,MD,SMD,SH_DATA,D,FA,FB,FROZEN_PRODUCTS,NWC_TYPES,RP_DATA},null,2);
+  return JSON.stringify({version:4,exportDate:new Date().toISOString(),PRODUCTS,MD,SMD,SH_DATA,D,FA,FB,FROZEN_PRODUCTS,FROZEN_USAGE_PRODUCTS,NWC_TYPES,RP_DATA},null,2);
 }
 function getODUser(){return'';}
 
@@ -5417,7 +5618,9 @@ function importData(input){
       if(!confirm('This will REPLACE all current data. Continue?'))return;
       if(data.PRODUCTS){PRODUCTS=data.PRODUCTS;saveProducts();}
       if(data.MD){MD=data.MD;saveMapping();}
-      if(data.D){D={inventories:[],receivables:[],returns:[],sales:[],daySales:[],stockSummaries:[],waste:[],production:[],...data.D};save();}
+      if(data.D){D={inventories:[],receivables:[],returns:[],sales:[],daySales:[],stockSummaries:[],waste:[],production:[],frozen:[],orders:[],frozenUsage:[],...data.D};save();}
+      if(data.FROZEN_PRODUCTS&&data.FROZEN_PRODUCTS.length){FROZEN_PRODUCTS=data.FROZEN_PRODUCTS;saveFrozenProducts();}
+      if(data.FROZEN_USAGE_PRODUCTS&&data.FROZEN_USAGE_PRODUCTS.length){FROZEN_USAGE_PRODUCTS=data.FROZEN_USAGE_PRODUCTS;saveFrozenUsageProducts();}
       FA=data.FA||[];FB=data.FB||[];
       if(data.SMD){SMD=data.SMD;saveStockMapping();}
       saveFormulas();recompute();
@@ -5522,7 +5725,7 @@ async function _loadAdminData(adminId){
   if(mainSnap.exists()){
     // Firebase has data - load it
     const d=mainSnap.data();
-    if(d.D)D={inventories:[],receivables:[],returns:[],sales:[],daySales:[],stockSummaries:[],waste:[],production:[],frozen:[],orders:[],...d.D};
+    if(d.D)D={inventories:[],receivables:[],returns:[],sales:[],daySales:[],stockSummaries:[],waste:[],production:[],frozen:[],orders:[],frozenUsage:[],...d.D};
 
     // تحميل orders من collection منفصل
     try{
@@ -5532,6 +5735,7 @@ async function _loadAdminData(adminId){
     if(d.FA)FA=d.FA;if(d.FB)FB=d.FB;
     if(d.PRODUCTS&&d.PRODUCTS.length)PRODUCTS=d.PRODUCTS;
     if(d.FROZEN_PRODUCTS&&d.FROZEN_PRODUCTS.length)FROZEN_PRODUCTS=d.FROZEN_PRODUCTS;
+    if(d.FROZEN_USAGE_PRODUCTS&&d.FROZEN_USAGE_PRODUCTS.length)FROZEN_USAGE_PRODUCTS=d.FROZEN_USAGE_PRODUCTS;
     if(d.MD)MD=d.MD;if(d.SMD)SMD=d.SMD;
     recompute();
   } else if(window.$isAdmin){
@@ -5567,7 +5771,7 @@ async function _fbSaveNow(){
   const uid=window.$user.uid;
   try{
     await window.$setDoc(window.$doc(window.$db,'users',uid,'data','main'),{
-      D:JSON.parse(JSON.stringify(D)),FA,FB,PRODUCTS,MD,SMD,FROZEN_PRODUCTS,updatedAt:Date.now()
+      D:JSON.parse(JSON.stringify(D)),FA,FB,PRODUCTS,MD,SMD,FROZEN_PRODUCTS,FROZEN_USAGE_PRODUCTS,updatedAt:Date.now()
     });
     await window.$setDoc(window.$doc(window.$db,'users',uid,'data','settings'),{
       NWC_TYPES,RP_DATA,SH_DATA,updatedAt:Date.now()
@@ -6631,7 +6835,7 @@ function ctResetTree(){
 
 // ═══ BOOT ════════════════════════════════════════════
 // Load local defaults first
-loadProducts();loadMapping();loadStockMapping();loadSH();loadRP();loadNWCTypes();loadFrozenProducts();load();loadFormulas();migrateCompact();
+loadProducts();loadMapping();loadStockMapping();loadSH();loadRP();loadNWCTypes();loadFrozenProducts();loadFrozenUsageProducts();load();loadFormulas();migrateCompact();
 checkODCallback();
 // Show login - Firebase onAuthStateChanged handles the rest
 _showLogin();
